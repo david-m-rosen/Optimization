@@ -1,0 +1,5 @@
+The C++ implementation of TNT contained herein is copyright (C) 2017 by David M. Rosen, and is distributed under the terms of the GNU General Public License (GPL) version 3 (or later).  See accompanying file COPYING.txt or <http://www.gnu.org/licenses/gpl.html>.
+
+In short, this means that everyone is free to use TNT, to modify it and to redistribute it on a free basis. However, TNT is NOT in the public domain; it is copyrighted, and there are restrictions on its distribution (see the license). For example, you cannot integrate this version of TNT (in full or in parts) in any closed-source software you plan to distribute (commercially or not). Please contact us for more information.
+
+Contact: drosen2000@gmail.com

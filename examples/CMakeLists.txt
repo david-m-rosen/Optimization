@@ -1,0 +1,50 @@
+# PROJECT CONFIGURATION
+cmake_minimum_required(VERSION 3.1)
+
+# Set this project's configuration
+project(OptimizationExamples C CXX)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON) # We require C++ 14
+add_compile_options(-march=native) # Enable faster instruction sets
+
+
+# Find Eigen library
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
+find_package(Eigen3 3.3.3 REQUIRED)
+if(EIGEN3_FOUND)
+message(STATUS "Found Eigen3 library (version ${EIGEN3_VERSION_STRING})")
+message(STATUS "Eigen3 include directory: ${EIGEN3_INCLUDE_DIR}\n")
+else()
+message(STATUS "Eigen library not found!")
+endif()
+
+# Add the Eigen include directories
+include_directories(${EIGEN3_INCLUDE_DIR})
+
+# EXAMPLE EXECUTABLES
+
+# Build unit test
+add_executable(TNTUnitTest EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/TNTUnitTest.cpp )
+target_link_libraries(TNTUnitTest Optimization)
+
+# Build a minimal working example to demonstrate gradient descent applied to solve a simple quadratic minimization problem
+add_executable(GradientDescentTest EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/GradientDescentTest.cpp)
+target_link_libraries(GradientDescentTest Optimization)
+
+# Build a minimal working example to demonstrate truncated-Newton trust-region optimization over the sphere S2
+add_executable(SphereOpt EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/SphereOpt.cpp)
+target_link_libraries(SphereOpt Optimization)
+
+# Build a minimal working example to the proximal gradient method on a group-sparse lasso problem
+add_executable(ProximalGradientTest EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/ProximalGradientTest.cpp)
+target_link_libraries(ProximalGradientTest Optimization)
+
+# Add these to a custom target named $EXAMPLES_TARGET_NAME in the generated Makefile
+add_custom_target(${EXAMPLES_TARGET_NAME})
+add_dependencies(${EXAMPLES_TARGET_NAME} TNTUnitTest GradientDescentTest SphereOpt ProximalGradientTest)
+
+
+
+
+
+
