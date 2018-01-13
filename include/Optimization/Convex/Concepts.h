@@ -47,6 +47,11 @@ template <typename Variable, typename... Args>
 using GradientOperator =
     std::function<Variable(const Variable &X, Args &... args)>;
 
+/** An alias template for an inner product */
+template <typename Variable, typename... Args>
+using InnerProduct =
+    std::function<double(const Variable &X, const Variable &Y, Args &... args)>;
+
 /** An alias template for a proximal operator of a function f: given a Variable
  * x and a scalar lambda > 0, this function computes and returns the value of
  * the scaled proximal operator prox_{lambda f}(x):

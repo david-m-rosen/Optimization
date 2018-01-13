@@ -18,9 +18,11 @@ int main() {
   typedef Eigen::VectorXd Variable;
   Eigen::Matrix2d A;
   A << 1000, 0, 0, 1.0;
-  // A = Eigen::Matrix2d::Identity();
   Variable b = Eigen::Vector2d(1, 1);
   double mu = 100;
+
+  InnerProduct<Variable> inner_product =
+      [&](const Variable &v1, const Variable &v2) { return v1.dot(v2); };
 
   // Define f and grad_f
   Objective<Variable> f = [&](const Variable &x) {
@@ -77,32 +79,16 @@ int main() {
   /// Set optimization algorithm parameters
   ProximalGradientParams params;
   params.verbose = true;
-  params.max_iterations = 10000;
+  params.max_iterations = 100000;
   // params.adaptive_restart = false;
   params.mode = ACCELERATED;
+  params.epsilon = 1e-4;
 
   cout << "Optimizing!" << endl << endl;
   ProximalGradientResult<Variable> result = ProximalGradient<Variable>(
-      f, grad_f, g, prox_g, x0, params, record_iterates);
+      f, grad_f, g, prox_g, inner_product, x0, params, record_iterates);
 
   cout << "Final result:" << endl;
   cout << "F(x) = " << result.f << endl;
   cout << "x = " << endl << result.x << endl << endl;
-
-  // Now write output to disk
-  string function_values_filename = "function_values.txt";
-  cout << "Saving function values to file: " << function_values_filename
-       << endl;
-  ofstream function_values_file(function_values_filename);
-  for (auto v : result.objective_values)
-    function_values_file << v << " ";
-  function_values_file << endl;
-  function_values_file.close();
-
-  string iterates_filename = "iterates.txt";
-  cout << "Saving iterates to file: " << iterates_filename << endl;
-  ofstream iterates_file(iterates_filename);
-  for (auto v : iterates)
-    iterates_file << v.transpose() << endl;
-  iterates_file.close();
 }

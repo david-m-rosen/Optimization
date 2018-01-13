@@ -117,7 +117,8 @@ ProximalGradientResult<Variable> ProximalGradient(
     const Objective<Variable, Args...> &f,
     const GradientOperator<Variable, Args...> &grad_f,
     const Objective<Variable, Args...> &g,
-    const ProximalOperator<Variable, Args...> &prox_g, const Variable &x0,
+    const ProximalOperator<Variable, Args...> &prox_g,
+    const InnerProduct<Variable, Args...> &inner_product, const Variable &x0,
     Args &... args,
     const ProximalGradientParams &params = ProximalGradientParams(),
     const std::experimental::optional<
@@ -200,9 +201,11 @@ ProximalGradientResult<Variable> ProximalGradient(
     std::cout << std::scientific;
     std::cout.precision(params.precision);
   }
-  // Field with for displaying outer iterations
+  // Field width for displaying outer iterations
   unsigned int iter_field_width = floor(log10(params.max_iterations)) + 1;
-  std::cout << "Proximal gradient optimization: " << std::endl << std::endl;
+
+  if (params.verbose)
+    std::cout << "Proximal gradient optimization: " << std::endl << std::endl;
 
   /// ITERATE!
   auto start_time = Stopwatch::tick();
@@ -231,8 +234,9 @@ ProximalGradientResult<Variable> ProximalGradient(
       Variable x_minus_y = x - y;
       double f_y = f(y, args...);
 
-      while ((F_x > f_y + x_minus_y.dot(grad_f_y) +
-                        (1 / (2 * lambda)) * sqrt(x_minus_y.dot(x_minus_y)) +
+      while ((F_x > f_y + inner_product(x_minus_y, grad_f_y) +
+                        (1 / (2 * lambda)) *
+                            sqrt(inner_product(x_minus_y, x_minus_y)) +
                         g(x, args...)) &&
              (linesearch_iters <= params.max_LS_iterations)) {
 
@@ -263,7 +267,7 @@ ProximalGradientResult<Variable> ProximalGradient(
     // Compute composite step dx for this iteration
     Variable dx = x - x_prev;
 
-    double norm_dx = sqrt(dx.dot(dx));
+    double norm_dx = sqrt(inner_product(dx, dx));
 
     // Compute improvement in objective
     double dF = F_x_prev - F_x;
@@ -273,10 +277,11 @@ ProximalGradientResult<Variable> ProximalGradient(
     Variable grad_f_x = grad_f(x, args...);
     Variable subgrad_g_x = (1 / lambda) * (hat_y - x);
     Variable subgrad_F_x = grad_f_x + subgrad_g_x;
-    residual = sqrt(subgrad_F_x.dot(subgrad_F_x)) /
-               (std::max<double>(sqrt(grad_f_x.dot(grad_f_x)),
-                                 sqrt(subgrad_g_x.dot(subgrad_g_x))) +
-                1e-6);
+    residual =
+        sqrt(inner_product(subgrad_F_x, subgrad_F_x)) /
+        (std::max<double>(sqrt(inner_product(grad_f_x, grad_f_x)),
+                          sqrt(inner_product(subgrad_g_x, subgrad_g_x))) +
+         1e-6);
 
     /// Display output for this iteration
 
@@ -323,7 +328,7 @@ ProximalGradientResult<Variable> ProximalGradient(
         // We employ the adaptive restart scheme described in eq. (13) of
         // O'Donoghue and Candes's paper "Adaptive Restart for Accelerated
         // Gradient Schemes"
-        if (dx.dot(y - x) > 0)
+        if (inner_product(dx, y - x) > 0)
           t_prev = 1;
       }
 
