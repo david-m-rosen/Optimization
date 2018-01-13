@@ -35,7 +35,7 @@ namespace Convex {
  * t: total elapsed computation time at the *start* of the current iteration
  * x: iterate at the *start* of the iteration
  * F: function value at the *start* of the current iteration
- * r: residual of the proximal fixed-point equation (measure of optimality)
+ * r: norm of the composite gradient G_lambda (measure of optimality)
  * linesearch_iters:  Number of iterations performed by the backtracking line
  *    search (only nonzero when backtracking linesearch is used)
  * dx: composite update step for this iteration (= x_next - x)
@@ -43,7 +43,7 @@ namespace Convex {
  */
 template <typename Variable, typename... Args>
 using ProximalGradientUserFunction =
-    std::function<void(double t, const Variable &x, double F, double r,
+    std::function<void(double t, const Variable &x, double F, double G_lambda,
                        unsigned int linesearch_iters, const Variable &dx,
                        double dF, Args &... args)>;
 
@@ -86,10 +86,16 @@ struct ProximalGradientParams : public OptimizerParams {
   // Maximum number of iterations to perform during backtracking line search
   unsigned int max_LS_iterations = 100;
 
+  // Stopping tolerance based upon the norm of the composite gradient step:
+  // G_lambda := (1/lambda) * (y - prox_{lambda * g}(y - lambda * grad_f(y)))
+  double composite_gradient_tolerance = 1e-3;
+
+  // Stopping tolerance based upon the normalized gradient residual
+
   // Stopping tolerance based on the normalized subgradient residual given in
   // eq. (42) of Goldstein et al.'s paper "A Field Guide to Forward-Backward
   // Splitting with a FASTA Implementation"
-  double epsilon = 1e-3;
+  double relative_composite_gradient_tolerance = 1e-3;
 };
 
 enum ProximalGradientStatus {
@@ -107,9 +113,11 @@ struct ProximalGradientResult : OptimizerResult<Variable> {
   // The stopping condition that triggered algorithm termination
   ProximalGradientStatus status;
 
-  // The residual of the proximal gradient fixed-point optimality condition at
-  // the START of each iteration
-  std::vector<double> residuals;
+  // Norm of the composite gradient G_t at the *END* of each iteration
+  std::vector<double> composite_gradient_norms;
+
+  // Relative norm of the composite gradient G_t at the *END* of each iteration
+  std::vector<double> relative_composite_gradient_norms;
 };
 
 template <typename Variable, typename... Args>
@@ -175,8 +183,11 @@ ProximalGradientResult<Variable> ProximalGradient(
   // Value of composite objective at the previous iterate x_prev;
   double F_x_prev;
 
-  // Residual of the fixed-point optimality condition at x
-  double residual;
+  // Norm of the composite gradient G_lambda;
+  double composite_gradient_norm;
+
+  // Norm of the relative residual
+  double relative_composite_gradient_norm;
 
   // Number of iterations performed in the backtracking linesearch in the
   // current iteration
@@ -221,6 +232,8 @@ ProximalGradientResult<Variable> ProximalGradient(
     x = prox_g(hat_y, lambda, args...);
     F_x = F(x, args...);
 
+    Variable x_minus_y = x - y;
+
     if (params.linesearch) {
       /// Beck and Teboulle's backtracking linesearch (cf. Secs. 1.4.3 and 1.5.2
       /// of Beck and Teboulle's "Gradient-Based Algorithms with Applications to
@@ -231,7 +244,6 @@ ProximalGradientResult<Variable> ProximalGradient(
 
       // Ensure sufficient decrease with respect to the quadratic model Q_L(x,y)
       // defined at the beginning of Sec. 1.4.1
-      Variable x_minus_y = x - y;
       double f_y = f(y, args...);
 
       while ((F_x > f_y + inner_product(x_minus_y, grad_f_y) +
@@ -272,13 +284,19 @@ ProximalGradientResult<Variable> ProximalGradient(
     // Compute improvement in objective
     double dF = F_x_prev - F_x;
 
+    // Compute composite gradient G_lambda
+    Variable G_lambda = (-1 / lambda) * x_minus_y;
+    composite_gradient_norm = sqrt(inner_product(G_lambda, G_lambda));
+
+    // Compute normalized
+
     // Compute normalized subgradient stopping criterion according to eq. (42)
     // of Goldstein et al.'s "Field Guide to Forward-Backward Splitting"
     Variable grad_f_x = grad_f(x, args...);
     Variable subgrad_g_x = (1 / lambda) * (hat_y - x);
-    Variable subgrad_F_x = grad_f_x + subgrad_g_x;
-    residual =
-        sqrt(inner_product(subgrad_F_x, subgrad_F_x)) /
+
+    relative_composite_gradient_norm =
+        composite_gradient_norm /
         (std::max<double>(sqrt(inner_product(grad_f_x, grad_f_x)),
                           sqrt(inner_product(subgrad_g_x, subgrad_g_x))) +
          1e-6);
@@ -291,7 +309,8 @@ ProximalGradientResult<Variable> ProximalGradient(
       std::cout.width(iter_field_width);
       std::cout << i << ", time: " << elapsed_time << ", F: ";
       std::cout.width(params.precision + 7);
-      std::cout << F_x_prev << ", res: " << residual
+      std::cout << F_x_prev << ", |G_lambda|: " << composite_gradient_norm
+                << ", |G_lambda| rel: " << relative_composite_gradient_norm
                 << ", ls iters: " << linesearch_iters << ", |dx|: " << norm_dx
                 << ", dF: ";
       std::cout.width(params.precision + 7);
@@ -301,16 +320,20 @@ ProximalGradientResult<Variable> ProximalGradient(
     /// Record output
     result.time.push_back(elapsed_time);
     result.objective_values.push_back(F_x_prev);
-    result.residuals.push_back(residual);
+    result.composite_gradient_norms.push_back(composite_gradient_norm);
+    result.relative_composite_gradient_norms.push_back(
+        relative_composite_gradient_norm);
 
     /// Call user function and pass information about the current iteration,
     /// if one was provided
     if (user_function)
-      (*user_function)(elapsed_time, x_prev, F_x_prev, residual,
+      (*user_function)(elapsed_time, x_prev, F_x_prev, composite_gradient_norm,
                        linesearch_iters, dx, dF, args...);
 
     /// Test stopping criteria
-    if (residual < params.epsilon) {
+    if (composite_gradient_norm < params.composite_gradient_tolerance ||
+        relative_composite_gradient_norm <
+            params.relative_composite_gradient_tolerance) {
       result.status = PROX_GRAD_RESIDUAL;
       break;
     }
@@ -363,8 +386,10 @@ ProximalGradientResult<Variable> ProximalGradient(
     // Print the reason for termination
     switch (result.status) {
     case PROX_GRAD_RESIDUAL:
-      std::cout << "Found minimizer! (Proximal fixed-point residual: "
-                << residual << ")" << std::endl;
+      std::cout << "Found minimizer! (Composite gradient norm: "
+                << composite_gradient_norm
+                << ", relative composite gradient norm: "
+                << relative_composite_gradient_norm << ")" << std::endl;
       break;
     case ITERATION_LIMIT:
       std::cout << "Algorithm exceeded maximum number of outer iterations"
