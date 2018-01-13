@@ -79,7 +79,7 @@ int main() {
   /// Set optimization algorithm parameters
   ProximalGradientParams params;
   params.verbose = true;
-  params.max_iterations = 100000;
+  params.max_iterations = 1000000;
   // params.adaptive_restart = false;
   params.mode = ACCELERATED;
   params.epsilon = 1e-4;
