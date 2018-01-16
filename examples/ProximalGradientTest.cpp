@@ -79,10 +79,10 @@ int main() {
   /// Set optimization algorithm parameters
   ProximalGradientParams params;
   params.verbose = true;
-  params.max_iterations = 100000;
+  params.max_iterations = 1000000;
   // params.adaptive_restart = false;
   params.mode = ACCELERATED;
-  params.epsilon = 1e-4;
+  params.composite_gradient_tolerance = 1e-4;
 
   cout << "Optimizing!" << endl << endl;
   ProximalGradientResult<Variable> result = ProximalGradient<Variable>(
