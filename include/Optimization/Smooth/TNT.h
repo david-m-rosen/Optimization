@@ -262,19 +262,41 @@ struct TNTParams : public SmoothOptimizerParams {
 /** A set of status flags indicating the stopping criterion that triggered
 * algorithm termination */
 enum TNTStatus {
+
+  /** The algorithm obtained a solution satisfying the gradient tolerance */
   GRADIENT,
+
+  /** The algorithm obtained a solution satisfying the preconditioned gradient
+     tolerance */
   PRECONDITIONED_GRADIENT,
+
+  /** The algorithm terminated because the relative decrease in function value
+     obtained after the last accepted update was less than the specified
+     tolerance */
   RELATIVE_DECREASE,
+
+  /** The algorithm terminated because the norm of the last accepted update step
+     was less than the specified tolerance */
   STEPSIZE,
+
+  /** The algorithm terminated because the trust-region radius decreased below
+     the specified threshold */
+  TRUST_REGION,
+
+  /** The algorithm exhausted the allotted number of major (outer) iterations */
   ITERATION_LIMIT,
-  ELAPSED_TIME,
-  TRUST_REGION
+
+  /** The algorithm exhausted the allotted computation time */
+  ELAPSED_TIME
 };
 
 /** A useful struct used to hold the output of a truncated-Newton trust-region
- optimization method */
+optimization method */
 template <typename Variable>
 struct TNTResult : public SmoothOptimizerResult<Variable> {
+
+  /** The norm of the preconditioned gradient at the returned estimate */
+  double preconditioned_grad_f_x_norm;
 
   /** The stopping condition that triggered algorithm termination */
   TNTStatus status;
@@ -283,7 +305,8 @@ struct TNTResult : public SmoothOptimizerResult<Variable> {
   std::vector<double> preconditioned_gradient_norms;
 
   /** The number of (inner) iterations performed by the Steihaug-Toint
-   * preconditioned conjugate-gradient method during each (outer) iteration */
+   * preconditioned conjugate-gradient method during each major (outer)
+   * iteration */
   std::vector<unsigned int> inner_iterations;
 
   /** The M-norm of the update step computed during each iteration */
@@ -331,7 +354,7 @@ TNT(const Objective<Variable, Args...> &f,
   double f_x, f_x_proposed;
 
   // Gradient and preconditioned gradient at the current iterate
-  double gradient_norm, preconditioned_gradient_norm;
+  double grad_f_x_norm, preconditioned_grad_f_x_norm;
 
   // Trust-region radius
   double Delta;
@@ -361,8 +384,21 @@ TNT(const Objective<Variable, Args...> &f,
   x = x0;
   // Function value ...
   f_x = f(x, args...);
+
   // And local quadratic model
   QM(x, grad, Hess, args...);
+
+  grad_f_x_norm = sqrt(metric(x, grad, grad, args...));
+  if (precon) {
+    // Precondition gradient
+    Tangent preconditioned_gradient = (*precon)(x, grad, args...);
+    preconditioned_grad_f_x_norm = sqrt(
+        metric(x, preconditioned_gradient, preconditioned_gradient, args...));
+  } else {
+    // We use the identity preconditioner, so the norms of the gradient and
+    // preconditioned gradient are identical
+    preconditioned_grad_f_x_norm = grad_f_x_norm;
+  }
 
   // Initialize trust-region radius
   Delta = params.Delta0;
@@ -391,24 +427,12 @@ TNT(const Objective<Variable, Args...> &f,
       break;
     }
 
-    gradient_norm = sqrt(metric(x, grad, grad, args...));
-    if (precon) {
-      // Precondition gradient
-      Tangent preconditioned_gradient = (*precon)(x, grad, args...);
-      preconditioned_gradient_norm = sqrt(
-          metric(x, preconditioned_gradient, preconditioned_gradient, args...));
-    } else {
-      // We use the identity preconditioner, so the norms of the gradient and
-      // preconditioned gradient are identical
-      preconditioned_gradient_norm = gradient_norm;
-    }
-
     // Record output
     result.time.push_back(elapsed_time);
     result.objective_values.push_back(f_x);
-    result.gradient_norms.push_back(gradient_norm);
+    result.gradient_norms.push_back(grad_f_x_norm);
     result.preconditioned_gradient_norms.push_back(
-        preconditioned_gradient_norm);
+        preconditioned_grad_f_x_norm);
     result.trust_region_radius.push_back(Delta);
 
     if (params.verbose) {
@@ -416,16 +440,16 @@ TNT(const Objective<Variable, Args...> &f,
       std::cout.width(iter_field_width);
       std::cout << iteration << ", time: " << elapsed_time << ", f: ";
       std::cout.width(params.precision + 7);
-      std::cout << f_x << ", |g|: " << gradient_norm
-                << ", |M^{-1}g|: " << preconditioned_gradient_norm;
+      std::cout << f_x << ", |g|: " << grad_f_x_norm
+                << ", |M^{-1}g|: " << preconditioned_grad_f_x_norm;
     }
 
     // Test gradient-based stopping criterion
-    if (gradient_norm < params.gradient_tolerance) {
+    if (grad_f_x_norm < params.gradient_tolerance) {
       result.status = GRADIENT;
       break;
     }
-    if (preconditioned_gradient_norm <
+    if (preconditioned_grad_f_x_norm <
         params.preconditioned_gradient_tolerance) {
       result.status = PRECONDITIONED_GRADIENT;
       break;
@@ -520,6 +544,19 @@ TNT(const Objective<Variable, Args...> &f,
 
       // ... and recompute the local quadratic model at the current iterate
       QM(x, grad, Hess, args...);
+
+      grad_f_x_norm = sqrt(metric(x, grad, grad, args...));
+      if (precon) {
+        // Precondition gradient
+        Tangent preconditioned_gradient = (*precon)(x, grad, args...);
+        preconditioned_grad_f_x_norm = sqrt(metric(
+            x, preconditioned_gradient, preconditioned_gradient, args...));
+      } else {
+        // We use the identity preconditioner, so the norms of the gradient and
+        // preconditioned gradient are identical
+        preconditioned_grad_f_x_norm = grad_f_x_norm;
+      }
+
     } // if (step_accepted)
 
     /// STEP 4: Update trust-region radius
@@ -546,6 +583,8 @@ TNT(const Objective<Variable, Args...> &f,
   // Record output
   result.x = x;
   result.f = f_x;
+  result.grad_f_x_norm = grad_f_x_norm;
+  result.preconditioned_grad_f_x_norm = preconditioned_grad_f_x_norm;
 
   if (params.verbose) {
     std::cout << std::endl
@@ -556,12 +595,12 @@ TNT(const Objective<Variable, Args...> &f,
     switch (result.status) {
     case GRADIENT:
       std::cout << "Found first-order critical point! (Gradient norm: "
-                << gradient_norm << ")" << std::endl;
+                << grad_f_x_norm << ")" << std::endl;
       break;
     case PRECONDITIONED_GRADIENT:
       std::cout
           << "Found first-order critical point! (Preconditioned gradient norm: "
-          << preconditioned_gradient_norm << ")" << std::endl;
+          << preconditioned_grad_f_x_norm << ")" << std::endl;
       break;
     case RELATIVE_DECREASE:
       std::cout

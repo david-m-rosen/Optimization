@@ -55,11 +55,27 @@ struct GradientDescentParams : public SmoothOptimizerParams {
 /** A set of status flags indicating the stopping criterion that triggered
 * algorithm termination */
 enum GradientDescentStatus {
+  /** The algorithm obtained a solution satisfying the gradient tolerance */
   GRADIENT,
+
+  /** The algorithm terminated because the relative decrease in function value
+     obtained after the last accepted update was less than the specified
+     tolerance */
   RELATIVE_DECREASE,
+
+  /** The algorithm terminated because the norm of the last accepted update step
+     was less than the specified tolerance */
   STEPSIZE,
-  ITERATION_LIMIT,
+
+  /** The algorithm terminated because linesearch failed to determine a stepsize
+     along the gradient direction that generated a sufficient decrease in
+     function value */
   LINESEARCH,
+
+  /** The algorithm exhausted the allotted number of major (outer) iterations */
+  ITERATION_LIMIT,
+
+  /** The algorithm exhausted the allotted computation time */
   ELAPSED_TIME,
 };
 
@@ -97,6 +113,9 @@ GradientDescent(const Objective<Variable, Args...> &f,
   // Gradient at the current iterate
   Tangent grad_f_x;
 
+  // Norm of the Riemannian gradient at the current iterate
+  double grad_f_x_norm;
+
   // Proposed update vector
   Tangent h;
 
@@ -116,9 +135,6 @@ GradientDescent(const Objective<Variable, Args...> &f,
   // iterates
   double relative_decrease;
 
-  // Norm of the Riemannian gradient at the current iterate
-  double gradient_norm;
-
   // Some useful constants for display purposes
 
   // Field with for displaying outer iterations
@@ -137,6 +153,10 @@ GradientDescent(const Objective<Variable, Args...> &f,
   // Set initial iterate and function value
   x = x0;
   f_x = f(x, args...);
+
+  // Compute gradient
+  grad_f_x = grad_f(x);
+  grad_f_x_norm = sqrt(metric(x, grad_f_x, grad_f_x, args...));
 
   if (params.verbose) {
     // Set display options for real-valued quantities
@@ -159,25 +179,21 @@ GradientDescent(const Objective<Variable, Args...> &f,
       break;
     }
 
-    // Compute gradient
-    grad_f_x = grad_f(x);
-    gradient_norm = sqrt(metric(x, grad_f_x, grad_f_x, args...));
-
     // Record output
     result.time.push_back(elapsed_time);
     result.objective_values.push_back(f_x);
-    result.gradient_norms.push_back(gradient_norm);
+    result.gradient_norms.push_back(grad_f_x_norm);
 
     if (params.verbose) {
       std::cout << "Iter: ";
       std::cout.width(iter_field_width);
       std::cout << iteration << ", time: " << elapsed_time << ", f: ";
       std::cout.width(params.precision + 7);
-      std::cout << f_x << ", |g|: " << gradient_norm;
+      std::cout << f_x << ", |g|: " << grad_f_x_norm;
     }
 
     // Test gradient-based stopping criterion
-    if (gradient_norm < params.gradient_tolerance) {
+    if (grad_f_x_norm < params.gradient_tolerance) {
       result.status = GRADIENT;
       break;
     }
@@ -205,7 +221,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
       f_x_proposed = f(x_proposed);
       df = f_x - f_x_proposed;
 
-      accept = (df > params.sigma * t_A * gradient_norm * gradient_norm);
+      accept = (df > params.sigma * t_A * grad_f_x_norm * grad_f_x_norm);
 
     } while ((!accept) && (ls_iters < params.max_ls_iterations));
 
@@ -224,7 +240,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
     /// Iterate accepted!
 
     // Compute norm of update step
-    h_norm = t_A * gradient_norm;
+    h_norm = t_A * grad_f_x_norm;
 
     relative_decrease = df / (fabs(f_x) + sqrt_eps);
 
@@ -245,6 +261,10 @@ GradientDescent(const Objective<Variable, Args...> &f,
     /// Update cached variables
     x = x_proposed;
     f_x = f_x_proposed;
+
+    // Update gradient
+    grad_f_x = grad_f(x);
+    grad_f_x_norm = sqrt(metric(x, grad_f_x, grad_f_x, args...));
 
     // Test additional stopping criteria
     if (relative_decrease < params.relative_decrease_tolerance) {
@@ -267,6 +287,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
   // Record output
   result.x = x;
   result.f = f_x;
+  result.grad_f_x_norm = grad_f_x_norm;
 
   if (params.verbose) {
     std::cout << std::endl
@@ -277,7 +298,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
     switch (result.status) {
     case GRADIENT:
       std::cout << "Found first-order critical point! (Gradient norm: "
-                << gradient_norm << ")" << std::endl;
+                << grad_f_x_norm << ")" << std::endl;
       break;
     case RELATIVE_DECREASE:
       std::cout

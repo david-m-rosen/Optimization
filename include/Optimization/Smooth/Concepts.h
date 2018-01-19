@@ -94,6 +94,9 @@ struct SmoothOptimizerParams : public OptimizerParams {
 template <typename Variable>
 struct SmoothOptimizerResult : public OptimizerResult<Variable> {
 
+  // The norm of the gradient at the returned estimate
+  double grad_f_x_norm;
+
   // The norm of the gradient at the *start* of each iteration
   std::vector<double> gradient_norms;
 
