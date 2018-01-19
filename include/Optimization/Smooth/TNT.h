@@ -623,13 +623,17 @@ TNT(const Objective<Variable, Args...> &f,
                 << std::endl;
       break;
     case ELAPSED_TIME:
-      std::cout << "Algorithm exceeded maximum allowed computation time: "
+      std::cout << "Algorithm exceeded maximum allowed computation time: ("
                 << result.elapsed_time << " > " << params.max_computation_time
-                << std::endl;
+                << " seconds)" << std::endl;
       break;
     }
 
     std::cout << "Final objective value: " << result.f << std::endl;
+    std::cout << "Norm of Riemannian gradient: " << result.grad_f_x_norm
+              << std::endl;
+    std::cout << "Norm of preconditioned Riemannian gradient: "
+              << result.preconditioned_grad_f_x_norm << std::endl;
     std::cout << "Total elapsed computation time: " << result.elapsed_time
               << " seconds" << std::endl
               << std::endl;
