@@ -5,6 +5,6 @@ This library provides a set of lightweight template functions implementing commo
 
 ## Copyright and License
 
-The C++ implementations contained herein are (C) 2017 by David M. Rosen, and are distributed under the terms of the GNU General Public License (GPL) version 3 (or later).  Please see the files LICENSE.txt and COPYING.txt for more information.
+The C++ implementations contained herein are (C) 2017 by David M. Rosen, and are distributed under the terms of the GNU Lesser General Public License (LGPL) version 3 (or later).  Please see the file LICENSE for more information.
 
 Contact: drosen2000@gmail.com
