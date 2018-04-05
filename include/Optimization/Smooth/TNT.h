@@ -82,7 +82,7 @@ using TNTUserFunction =
  *
  *  || g_k || <= ||g_0|| min [kappa_fgr, || g_0 ||^theta]
  *
- * (cf. Algorithm 7.5.1 of "Trust-Region Methods"
+ * (cf. Algorithm 7.5.1 of "Trust-Region Methods").
  *
  * - update_step_M_norm is a return value that gives the norm || h ||_M of
  * the update step in the M-norm determined by the preconditioner
@@ -206,56 +206,55 @@ Tangent STPCG(const Variable &X, const Tangent &grad,
 struct TNTParams : public SmoothOptimizerParams {
   /// Trust-region control parameters
 
-  // Initial size of trust-region radius
+  /** Initial size of trust-region radius */
   double Delta0 = 1;
 
-  // Lower-bound on the gain ratio for accepting a proposed step (should satisfy
-  // 0 < eta1 <= eta2)
+  /** Lower-bound on the gain ratio for accepting a proposed step (should
+satisfy 0 < eta1 <= eta2) */
   double eta1 = .05;
 
-  // Lower-bound on the gain ratio for a 'very successful' iteration (should
-  // satisfy eta1 <= eta2 < 1).
+  /** Lower-bound on the gain ratio for a 'very successful' iteration (should
+   * satisfy eta1 <= eta2 < 1). */
   double eta2 = .9;
 
-  // Multiplicative factor for decreasing the trust-region radius on an
-  // unsuccessful iteration; this parameter should
-  // satisfy 0 < alpha1 < 1.
+  /** Multiplicative factor for decreasing the trust-region radius on an
+   * unsuccessful iteration; this parameter should satisfy 0 < alpha1 < 1. */
   double alpha1 = .25;
 
-  // Multiplicative factor for increasing the trust-region radius on a very
-  // successful iteration.  This parameter
-  // should satisfy alpha2 > 1.
+  /** Multiplicative factor for increasing the trust-region radius on a very
+   * successful iteration.  This parameter should satisfy alpha2 > 1. */
   double alpha2 = 2.5;
 
   /// Truncated preconditioned conjugate-gradient control parameters
   // See Section 7.5.1 of "Trust-Region Methods" for details
 
-  // Maximum number of conjugate-gradient iterations to apply to solve each
-  // instance of the trust-region subproblem
+  /** Maximum number of conjugate-gradient iterations to apply to solve each
+   * instance of the trust-region subproblem */
   double max_TPCG_iterations = 1000;
 
-  // Stopping tolerance for the norm of the predicted gradient (acccording to
-  // the local quadratic model): terminate
-  // the inner iterations if ||g_pred|| <  kappa_fgr * || g_init ||.  This value
-  // should lie in the range (0, 1)
+  /** Stopping tolerance for the norm of the predicted gradient (acccording to
+   * the local quadratic model): terminate the inner iterations if ||g_pred||
+   * kappa_fgr * || g_init ||.  This value should lie in the range (0, 1) */
   double kappa_fgr = .1;
 
-  // Stopping tolerance for the norm of the predicted gradient (according to the
-  // local quadratic model):  terminate
-  // the inner iterations if ||g_pred|| < ||g_init||^theta.  This value should
-  // lie in the range (0,1)
+  /** Stopping tolerance for the norm of the predicted gradient (according to
+   * the local quadratic model):  terminate the inner iterations if ||g_pred|| <
+   * ||g_init||^{1+theta}.  This value should be positive, and controls the
+   * asymptotic convergence rate of the TNT algorithm: specifically, for theta >
+   * 0, TNT convergences q-superlinearly with order (1 + theta) (cf. Theorem 2.3
+   * of "Truncated-Newton Algorithms for Large-Scale Unconstrained
+   * Optimization", by R.S. Dembo and T. Steihaug.) */
   double theta = .5;
 
   /// Additional termination criteria
 
-  // Stopping tolerance for the norm of the preconditioned gradient
-  // || M^{-1} g ||.  Note that this stopping criterion has the advantage of
-  // (approximate) scale invariance
+  /** Stopping tolerance for the norm of the preconditioned gradient
+   * || M^{-1} g ||.  Note that this stopping criterion has the advantage of
+   * (approximate) scale invariance */
   double preconditioned_gradient_tolerance = 1e-6;
 
-  // Stopping condition based on the size of the trust-region radius; terminate
-  // if the radius is reduced below this
-  // quantity
+  /** Stopping condition based on the size of the trust-region radius; terminate
+   * if the radius is reduced below this quantity */
   double Delta_tolerance = 1e-6;
 };
 
@@ -275,7 +274,8 @@ enum TNTStatus {
      tolerance */
   RELATIVE_DECREASE,
 
-  /** The algorithm terminated because the norm of the last accepted update step
+  /** The algorithm terminated because the norm of the last accepted update
+     step
      was less than the specified tolerance */
   STEPSIZE,
 
@@ -283,7 +283,8 @@ enum TNTStatus {
      the specified threshold */
   TRUST_REGION,
 
-  /** The algorithm exhausted the allotted number of major (outer) iterations */
+  /** The algorithm exhausted the allotted number of major (outer) iterations
+     */
   ITERATION_LIMIT,
 
   /** The algorithm exhausted the allotted computation time */
@@ -301,7 +302,8 @@ struct TNTResult : public SmoothOptimizerResult<Variable> {
   /** The stopping condition that triggered algorithm termination */
   TNTStatus status;
 
-  /** The preconditioned norm of the gradient at the START of each iteration */
+  /** The preconditioned norm of the gradient at the START of each iteration
+   */
   std::vector<double> preconditioned_gradient_norms;
 
   /** The number of (inner) iterations performed by the Steihaug-Toint
@@ -455,9 +457,9 @@ TNT(const Objective<Variable, Args...> &f,
       break;
     }
 
-    /// STEP 2:  Solve the local trust-region subproblem at the current iterate
-    /// using the computed quadratic model using the Steihaug-Toint truncated
-    /// preconditioned conjugate-gradient method
+    /// STEP 2:  Solve the local trust-region subproblem at the current
+    /// iterate using the computed quadratic model using the Steihaug-Toint
+    /// truncated preconditioned conjugate-gradient method
 
     // Norm of the update in the norm determined by the preconditioner
     unsigned int inner_iterations;
@@ -552,7 +554,8 @@ TNT(const Objective<Variable, Args...> &f,
         preconditioned_grad_f_x_norm = sqrt(metric(
             x, preconditioned_gradient, preconditioned_gradient, args...));
       } else {
-        // We use the identity preconditioner, so the norms of the gradient and
+        // We use the identity preconditioner, so the norms of the gradient
+        // and
         // preconditioned gradient are identical
         preconditioned_grad_f_x_norm = grad_f_x_norm;
       }
@@ -598,9 +601,9 @@ TNT(const Objective<Variable, Args...> &f,
                 << grad_f_x_norm << ")" << std::endl;
       break;
     case PRECONDITIONED_GRADIENT:
-      std::cout
-          << "Found first-order critical point! (Preconditioned gradient norm: "
-          << preconditioned_grad_f_x_norm << ")" << std::endl;
+      std::cout << "Found first-order critical point! (Preconditioned "
+                   "gradient norm: "
+                << preconditioned_grad_f_x_norm << ")" << std::endl;
       break;
     case RELATIVE_DECREASE:
       std::cout
