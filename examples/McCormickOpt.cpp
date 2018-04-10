@@ -13,7 +13,6 @@
 #include <Eigen/Dense>
 
 #include <random>
-#include <time.h>
 
 typedef Eigen::Vector2d Vector;
 
@@ -56,16 +55,58 @@ int main() {
     };
   };
 
+  // Preconditioner
+  //
+  // NB:  This preconditioning operator works by evaluating the Hessian matrix
+  // Hess(x), computing a positive-definite approximation of its inverse using a
+  // modified eigendecomposition, and then applying this PD approximation to
+  // precondition the input vector v, EACH TIME IT IS CALLED.
+  //
+  // Obviously, there are much more efficient ways of implementing this
+  // operation (including making use of the variadic template arguments to
+  // define cache variables that can save/reuse intermediate parts of the
+  // computation, such as the eigendecomposition, etc.)  The simpler (*much*
+  // less efficient) implementation used here is employed for the sake of
+  // clarity of exposition, since the computational inefficiency of this
+  // approach is not a serious limitation on this small (2D example)
+
+  EuclideanLinearOperator<Vector> precon =
+      [&compute_Hessian](const Vector &x, const Vector &v) -> Vector {
+
+    // Compute Hessian matrix H at x
+    Eigen::Matrix2d H = compute_Hessian(x);
+
+    // Compute eigendecomposition of H
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> eigensolver(
+        H, Eigen::ComputeEigenvectors);
+
+    // Modify eigenvalues of H (if necessary) to ensure that they are
+    // greater than a minimum (positive) constant lambda_min
+    double lambda_min = .01;
+    Vector lambdas = eigensolver.eigenvalues();
+    Vector lambdas_plus =
+        lambdas.array().max(Eigen::Array2d::Constant(lambda_min));
+
+    // Now use these to compute an approximate inverse Hessian
+    Vector lambdas_plus_inv = lambdas_plus.cwiseInverse();
+
+    // Compute approximate inverse Hessian
+    Eigen::Matrix2d M = eigensolver.eigenvectors() *
+                        lambdas_plus_inv.asDiagonal() *
+                        eigensolver.eigenvectors().transpose();
+
+    // Apply M to precondition v
+    return M * v;
+  };
+
   /// SAMPLE INITIAL POINT
 
-  Vector x0(.1, .1);
-  Vector x_opt(-0.54719, -1.54719);
+  Vector x0(-.5, -.5);
+  Vector x_target(-0.54719, -1.54719);
 
   cout << "Initial point: x0 = " << endl << x0 << endl << endl;
 
   /// RUN TNT OPTIMIZER!
-
-  // Test Hessian
 
   cout << "Running TNT optimizer!" << endl << endl;
 
@@ -73,15 +114,15 @@ int main() {
   Optimization::Smooth::TNTParams params;
   params.verbose = true;
 
-  TNTResult<Vector> result =
-      EuclideanTNT<Vector>(F, QM, x0, std::experimental::nullopt, params);
+  TNTResult<Vector> result = EuclideanTNT<Vector>(F, QM, x0, precon, params);
 
   cout << "Final objective value: = " << result.f << endl;
-  cout << "True global minimum: -1.9133" << endl;
+  cout << "Target global minimum: -1.9133" << endl;
   cout << "Error in final objective: " << result.f + 1.9133 << endl << endl;
 
   cout << "Estimated minimizer: " << endl << result.x << endl << endl;
-  cout << "True global minimizer: " << endl << x_opt << endl << endl;
-  cout << "Error in minimizer estimate: " << (result.x - x_opt).norm() << endl
+  cout << "Target minimizer: " << endl << x_target << endl << endl;
+  cout << "Error in minimizer estimate: " << (result.x - x_target).norm()
+       << endl
        << endl;
 }

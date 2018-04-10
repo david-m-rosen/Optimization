@@ -68,7 +68,7 @@ using TNTUserFunction =
  * - grad is the gradient vector computed for the model objective at X
  * - Hess is a linear operator that models the Hessian of the objective at X
  * - metric is the Riemannian metric at the current iterate X
- * - precon is a preconditioning operator
+ * - precon is a *positive-definite* preconditioning operator
  * - Delta is the trust-region radius around X, in the M-norm determined by
  *   the preconditioner; if the preconditioner acts as v -> M^{-1} v, then the
  *   trust-region is given by
