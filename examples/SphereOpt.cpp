@@ -74,14 +74,14 @@ int main() {
 
   /// SAMPLE INITIAL POINT
 
-  cout << "Target point: p = " << endl << P << endl << endl;
+  cout << "Target point: P = " << endl << P << endl << endl;
 
-  cout << "Sampling an initial point x0 on the sphere S^2 by perturbing a ... "
+  cout << "Sampling an initial point x0 on the sphere S^2 by perturbing P ... "
        << endl;
 
   // Construct a random initial point by slightly "fuzzing" a
   double epsilon = .75;
-  // Unit tangent vector in T_a(S^2)
+  // Unit tangent vector in T_P(S^2)
   Vector V = project(P, Vector::Random()).normalized();
   // Move away from x0 along v
   Vector X0 = retract(P, epsilon * V, P);

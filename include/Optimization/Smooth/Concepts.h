@@ -71,6 +71,27 @@ using QuadraticModel =
                        LinearOperator<Variable, Tangent, Args...> &Hessian,
                        Args &... args)>;
 
+/** These next typedefs provide convenient specializations of the above
+ * concepts for the (common) use case of optimization over Euclidean spaces,
+ * making use of the (standard) identification of the tangent space T_x(R^n) at
+ * a point x in R^n with the space R^n itself (i.e., we make use of a *single*
+ * type Vector to model both elements x of the linear space R^n and tangent
+ * vectors v).  It is assumed that objects of type Vector implement the standard
+ * vector space operations, including vector addition, subtraction,
+ * left-multiplication by scalars, and evaluation of the standard Euclidean
+ * inner product by means of a method with the signature
+ * dot(Vector& v2) const.
+ */
+
+template <typename Vector, typename... Args>
+using EuclideanVectorField = VectorField<Vector, Vector, Args...>;
+
+template <typename Vector, typename... Args>
+using EuclideanLinearOperator = LinearOperator<Vector, Vector, Args...>;
+
+template <typename Vector, typename... Args>
+using EuclideanQuadraticModel = QuadraticModel<Vector, Vector, Args...>;
+
 /** A lightweight struct containing configuration parameters
  * for a Riemannian optimization method */
 struct SmoothOptimizerParams : public OptimizerParams {

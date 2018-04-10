@@ -64,28 +64,28 @@ using TNTUserFunction =
  * the reference "Trust-Region Methods" by Conn, Gould, and Toint.  Here:
  *
  * - X is the value of the optimization variable at which the linear model
- * is constructed
+ *   is constructed
  * - grad is the gradient vector computed for the model objective at X
  * - Hess is a linear operator that models the Hessian of the objective at X
  * - metric is the Riemannian metric at the current iterate X
  * - precon is a preconditioning operator
  * - Delta is the trust-region radius around X, in the M-norm determined by
- * the preconditioner; if the preconditioner acts as v -> M^{-1} v, then the
- * trust-region is given by
+ *   the preconditioner; if the preconditioner acts as v -> M^{-1} v, then the
+ *   trust-region is given by
  *
  *   || s ||_M <= Delta
  *
  * - kappa_fgr and theta are parameters that control the stopping criteria
- * for the algorithm; termination occurs whenever the predicted gradient g_k at
- * the iterate obtained by applying the current update step (as predicted by the
- * local quadratic model) satisfies:
+ *   for the algorithm; termination occurs whenever the predicted gradient g_k
+ *   at the iterate obtained by applying the current update step (as predicted
+ *   by the local quadratic model) satisfies:
  *
- *  || g_k || <= ||g_0|| min [kappa_fgr, || g_0 ||^theta]
+ *   || g_k || <= ||g_0|| min [kappa_fgr, || g_0 ||^theta]
  *
- * (cf. Algorithm 7.5.1 of "Trust-Region Methods").
+ *   (cf. Algorithm 7.5.1 of "Trust-Region Methods").
  *
  * - update_step_M_norm is a return value that gives the norm || h ||_M of
- * the update step in the M-norm determined by the preconditioner
+ *   the update step in the M-norm determined by the preconditioner
  */
 
 template <typename Variable, typename Tangent, typename... Args>
@@ -644,5 +644,38 @@ TNT(const Objective<Variable, Args...> &f,
 
   return result;
 }
+
+/** This next function provides a convenient specialization of the TNT interface
+ * for the (common) use case of optimization over Euclidean spaces */
+
+template <typename Vector, typename... Args>
+using EuclideanTNTUserFunction = TNTUserFunction<Vector, Vector, Args...>;
+
+template <typename Vector, typename... Args>
+TNTResult<Vector> EuclideanTNT(
+    const Objective<Vector, Args...> &f,
+    const EuclideanQuadraticModel<Vector, Args...> &QM, const Vector &x0,
+    Args &... args,
+    const std::experimental::optional<EuclideanLinearOperator<Vector, Args...>>
+        &precon = std::experimental::nullopt,
+    const TNTParams &params = TNTParams(),
+    const std::experimental::optional<EuclideanTNTUserFunction<Vector, Args...>>
+        &user_function = std::experimental::nullopt) {
+
+  /// Standard Euclidean inner product
+  RiemannianMetric<Vector, Vector, Args...> metric =
+      [](const Vector &X, const Vector &V1, const Vector &V2, Args... args) {
+        return V1.dot(V2);
+      };
+
+  /// Standard Euclidean retraction
+  Retraction<Vector, Vector, Args...> retraction =
+      [](const Vector &X, const Vector &V, Args... args) { return X + V; };
+
+  /// Run TNT algorithm using these Euclidean operators
+  return TNT<Vector, Vector, Args...>(f, QM, metric, retraction, x0, args...,
+                                      precon, params, user_function);
+}
+
 } // Smooth
 } // Optimization
