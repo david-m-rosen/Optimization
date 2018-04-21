@@ -668,19 +668,10 @@ TNTResult<Vector> EuclideanTNT(
     const std::experimental::optional<EuclideanTNTUserFunction<Vector, Args...>>
         &user_function = std::experimental::nullopt) {
 
-  /// Standard Euclidean inner product
-  RiemannianMetric<Vector, Vector, Args...> metric =
-      [](const Vector &X, const Vector &V1, const Vector &V2, Args... args) {
-        return V1.dot(V2);
-      };
-
-  /// Standard Euclidean retraction
-  Retraction<Vector, Vector, Args...> retraction =
-      [](const Vector &X, const Vector &V, Args... args) { return X + V; };
-
   /// Run TNT algorithm using these Euclidean operators
-  return TNT<Vector, Vector, Args...>(f, QM, metric, retraction, x0, args...,
-                                      precon, params, user_function);
+  return TNT<Vector, Vector, Args...>(f, QM, EuclideanMetric<Vector, Args...>,
+                                      EuclideanRetraction<Vector, Args...>, x0,
+                                      args..., precon, params, user_function);
 }
 
 } // Smooth

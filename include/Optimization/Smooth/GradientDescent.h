@@ -9,6 +9,7 @@
 #include <experimental/optional>
 #include <iostream>
 #include <limits>
+#include <math.h>
 
 #include "Optimization/Smooth/Concepts.h"
 #include "Optimization/Util/Stopwatch.h"
@@ -337,6 +338,30 @@ GradientDescent(const Objective<Variable, Args...> &f,
   }
 
   return result;
+}
+
+/** This next function provides a convenient specialization of the gradient
+ * descent interface for the (common) use case of optimization over Euclidean
+ * spaces */
+
+template <typename Vector, typename... Args>
+using EuclideanGradientDescentUserFunction =
+    GradientDescentUserFunction<Vector, Vector, Args...>;
+
+template <typename Vector, typename... Args>
+GradientDescentResult<Vector> EuclideanGradientDescent(
+    const Objective<Vector, Args...> &f,
+    const EuclideanVectorField<Vector, Args...> grad_f, const Vector &x0,
+    Args &... args,
+    const GradientDescentParams &params = GradientDescentParams(),
+    const std::experimental::optional<
+        EuclideanGradientDescentUserFunction<Vector, Args...>> &user_function =
+        std::experimental::nullopt) {
+
+  /// Run TNT algorithm using these Euclidean operators
+  return GradientDescent<Vector, Vector, Args...>(
+      f, grad_f, EuclideanMetric<Vector, Args...>,
+      EuclideanRetraction<Vector, Args...>, x0, args..., params, user_function);
 }
 } // Smooth
 } // Optimization

@@ -139,7 +139,7 @@ int main() {
        << endl
        << endl;
 
-  /// RECORD STATE TRACES
+  /// SAVE STATE TRACES TO DISK
 
   cout << "Saving state traces" << endl;
 

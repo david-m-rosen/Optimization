@@ -1,5 +1,6 @@
 /** This simple example demonstrates how to use the simplified Euclidean
- * truncated-Newton trust-region interface to minimize the McCormick function:
+ * interfaces for the gradient descent and truncated Newton trust-region (TNT)
+ * algorithms to minimize the McCormick function:
  *
  * f(x,y) = sin(x + y) + (x - y)^2 - 1.5x + 2.5y + 1
  *
@@ -8,11 +9,10 @@
  * f(-.54719, -1.54719) = -1.9133
  */
 
+#include "Optimization/Smooth/GradientDescent.h"
 #include "Optimization/Smooth/TNT.h"
 
 #include <Eigen/Dense>
-
-#include <random>
 
 typedef Eigen::Vector2d Vector;
 
@@ -28,6 +28,12 @@ int main() {
   Objective<Vector> F = [](const Vector &x) {
     return sin(x(0) + x(1)) + (x(0) - x(1)) * (x(0) - x(1)) - 1.5 * x(0) +
            2.5 * x(1) + 1;
+  };
+
+  // Gradient
+  EuclideanVectorField<Vector> grad_F = [](const Vector &x) {
+    return Vector(cos(x(0) + x(1)) + 2 * (x(0) - x(1)) - 1.5,
+                  cos(x(0) + x(1)) - 2 * (x(0) - x(1)) + 2.5);
   };
 
   // Convenient utility function: Compute and return the Hessian matrix
@@ -106,23 +112,41 @@ int main() {
 
   cout << "Initial point: x0 = " << endl << x0 << endl << endl;
 
+  /// RUN GRADIENT DESCENT OPTIMIZER!
+  GradientDescentParams gd_params;
+  gd_params.verbose = true;
+
+  GradientDescentResult<Vector> gd_result =
+      EuclideanGradientDescent<Vector>(F, grad_F, x0, gd_params);
+
+  cout << "Final objective value: = " << gd_result.f << endl;
+  cout << "Target global minimum: -1.9133" << endl;
+  cout << "Error in final objective: " << gd_result.f + 1.9133 << endl << endl;
+
+  cout << "Estimated minimizer: " << endl << gd_result.x << endl << endl;
+  cout << "Target minimizer: " << endl << x_target << endl << endl;
+  cout << "Error in minimizer estimate: " << (gd_result.x - x_target).norm()
+       << endl
+       << endl;
+
   /// RUN TNT OPTIMIZER!
 
   cout << "Running TNT optimizer!" << endl << endl;
 
   // Set TNT options
-  Optimization::Smooth::TNTParams params;
-  params.verbose = true;
+  Optimization::Smooth::TNTParams tnt_params;
+  tnt_params.verbose = true;
 
-  TNTResult<Vector> result = EuclideanTNT<Vector>(F, QM, x0, precon, params);
+  TNTResult<Vector> tnt_result =
+      EuclideanTNT<Vector>(F, QM, x0, precon, tnt_params);
 
-  cout << "Final objective value: = " << result.f << endl;
+  cout << "Final objective value: = " << tnt_result.f << endl;
   cout << "Target global minimum: -1.9133" << endl;
-  cout << "Error in final objective: " << result.f + 1.9133 << endl << endl;
+  cout << "Error in final objective: " << tnt_result.f + 1.9133 << endl << endl;
 
-  cout << "Estimated minimizer: " << endl << result.x << endl << endl;
+  cout << "Estimated minimizer: " << endl << tnt_result.x << endl << endl;
   cout << "Target minimizer: " << endl << x_target << endl << endl;
-  cout << "Error in minimizer estimate: " << (result.x - x_target).norm()
+  cout << "Error in minimizer estimate: " << (tnt_result.x - x_target).norm()
        << endl
        << endl;
 }

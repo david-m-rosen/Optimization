@@ -1,4 +1,8 @@
+/** This simple example demonstrates how to run gradient descent on a quadratic
+ * test function using the simplified (Euclidean) interface */
+
 #include <Eigen/Dense>
+#include <fstream>
 
 #include "Optimization/Smooth/GradientDescent.h"
 
@@ -15,8 +19,7 @@ int main() {
    *
    */
 
-  typedef Eigen::Vector2d Variable;
-  typedef Eigen::Vector2d Tangent;
+  typedef Eigen::Vector2d Vector;
 
   Eigen::Matrix2d A = Eigen::Matrix2d::Random();
   Eigen::Vector2d b = Eigen::Vector2d::Random();
@@ -33,36 +36,27 @@ int main() {
        << endl;
 
   // Define f
-  Objective<Variable> f = [&](const Variable &x) {
+  Objective<Vector> f = [&](const Vector &x) {
     return (A * x - b).squaredNorm();
   };
 
   // Gradient of f
-  VectorField<Variable, Tangent> grad_f = [&](const Variable &x) {
+  EuclideanVectorField<Vector> grad_f = [&](const Vector &x) {
     return 2 * A.transpose() * (A * x - b);
   };
-
-  // Riemannian metric
-  RiemannianMetric<Variable, Tangent> metric =
-      [&](const Variable &x, const Tangent &v1, const Tangent &v2) {
-        return v1.dot(v2);
-      };
-
-  // Retraction operator
-  Retraction<Variable, Tangent> retract =
-      [&](const Tangent &x, const Tangent &v) { return x + v; };
 
   /// Optimization setup
   GradientDescentParams params;
   params.max_iterations = 100000;
+  params.log_iterates = true;
   params.verbose = true;
 
   /// Initialization
 
-  Variable x0 = Variable::Random();
+  Vector x0 = Vector::Random();
 
-  GradientDescentResult<Variable> result =
-      GradientDescent(f, grad_f, metric, retract, x0, params);
+  GradientDescentResult<Vector> result =
+      EuclideanGradientDescent(f, grad_f, x0, params);
 
   cout << "Final result: " << endl
        << "x = " << endl
