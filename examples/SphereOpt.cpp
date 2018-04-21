@@ -1,12 +1,14 @@
-/** This simple example demonstrates how to use the TNT truncated-Newton
- * trust-region library to perform optimization over the sphere S^2 in R^3.*/
-
-#include "Optimization/Smooth/TNT.h"
+/** This simple example demonstrates how to use Riemannian gradient descent and
+ * truncated-Newton trust-region (TNT) algorithms to solve a simple optimization
+ * problem over the sphere S^2 in R^3. */
 
 #include <Eigen/Dense>
 
-#include <random>
+#include <fstream>
 #include <time.h>
+
+#include "Optimization/Smooth/GradientDescent.h"
+#include "Optimization/Smooth/TNT.h"
 
 typedef Eigen::Vector3d Vector;
 
@@ -36,6 +38,20 @@ int main() {
   Optimization::Objective<Vector, Vector> F =
       [](const Vector &X, const Vector &Y) { return (X - Y).squaredNorm(); };
 
+  /// Gradient
+  Optimization::Smooth::VectorField<Vector, Vector, Vector> grad_F =
+      [&project](const Vector &X, const Vector &P) {
+
+        // Euclidean gradient
+        Eigen::Vector3d nabla_f = 2 * (X - P);
+
+        // Euclidean Hessian matrix
+        Eigen::Matrix3d H = 2 * Eigen::Matrix3d::Identity();
+
+        // Compute Riemannian gradient from Euclidean one
+        return project(X, nabla_f);
+      };
+
   /// Local quadratic model function:  this constructs the (Riemannian) gradient
   /// and model Hessian operator for f at x.
   Optimization::Smooth::QuadraticModel<Vector, Vector, Vector> QM = [&project](
@@ -52,8 +68,8 @@ int main() {
     // Compute Riemannian gradient from Euclidean one
     grad = project(X, nabla_f);
 
-    // Return Riemannian Hessian-vector product operator using the Euclidean
-    // Hessian
+    // Return Riemannian Hessian-vector product operator using the
+    // Euclidean Hessian
     Hessian = [&project, H, nabla_f](const Vector &X, const Vector &Xdot,
                                      const Vector &P) {
       return project(X, H * Xdot) - X.dot(nabla_f) * Xdot;
@@ -72,39 +88,91 @@ int main() {
         return (X + V).normalized();
       };
 
-  /// SAMPLE INITIAL POINT
+  /// SET INITIAL POINT
+
+  Vector X0 = {sqrt(1.0 / 2), 0.0, -sqrt(1.0 / 2)};
 
   cout << "Target point: P = " << endl << P << endl << endl;
-
-  cout << "Sampling an initial point x0 on the sphere S^2 by perturbing P ... "
-       << endl;
-
-  // Construct a random initial point by slightly "fuzzing" a
-  double epsilon = .75;
-  // Unit tangent vector in T_P(S^2)
-  Vector V = project(P, Vector::Random()).normalized();
-  // Move away from x0 along v
-  Vector X0 = retract(P, epsilon * V, P);
-
   cout << "X0 = " << endl << X0 << endl << endl;
 
   cout << "Initial distance between X0 and P: " << (X0 - P).norm() << endl
        << endl;
 
+  /// RUN GRADIENT DESCENT OPTIMIZER!
+
+  cout << "RUNNING GRADIENT DESCENT OPTIMIZER!" << endl << endl;
+
+  // Set gradient descent options
+  Optimization::Smooth::GradientDescentParams gd_params;
+  gd_params.max_iterations = 1000;
+  gd_params.verbose = true;
+  gd_params.log_iterates = true;
+
+  Optimization::Smooth::GradientDescentResult<Vector> gd_result =
+      Optimization::Smooth::GradientDescent<Vector, Vector, Vector>(
+          F, grad_F, metric, retract, X0, P, gd_params);
+
+  cout << "Gradient descent final estimate for x =  " << endl
+       << gd_result.x << endl
+       << endl;
+
+  cout << "Distance between p and x_final: " << (P - gd_result.x).norm() << endl
+       << endl;
+
   /// RUN TNT OPTIMIZER!
 
-  cout << "Running TNT optimizer!" << endl << endl;
+  cout << "RUNNING TNT OPTIMIZER!" << endl << endl;
 
   // Set TNT options
-  Optimization::Smooth::TNTParams params;
-  params.verbose = true;
-  // params.Delta0 = .75;
+  Optimization::Smooth::TNTParams tnt_params;
+  tnt_params.verbose = true;
+  tnt_params.log_iterates = true;
 
-  Optimization::Smooth::TNTResult<Vector> result =
+  Optimization::Smooth::TNTResult<Vector> tnt_result =
       Optimization::Smooth::TNT<Vector, Vector, Vector>(
-          F, QM, metric, retract, X0, P, std::experimental::nullopt, params);
+          F, QM, metric, retract, X0, P, std::experimental::nullopt,
+          tnt_params);
 
-  cout << "x_final = " << endl << result.x << endl << endl;
+  cout << "x_final = " << endl << tnt_result.x << endl << endl;
 
-  cout << "Distance between p and x_final: " << (P - result.x).norm() << endl;
+  cout << "Distance between p and x_final: " << (P - tnt_result.x).norm()
+       << endl
+       << endl;
+
+  /// RECORD STATE TRACES
+
+  cout << "Saving state traces" << endl;
+
+  std::string gd_function_values_filename = "gd_function_values.txt";
+  std::string gd_iterates_filename = "gd_iterates.txt";
+
+  cout << "Saving sequence of function values to file: "
+       << gd_function_values_filename << endl;
+  ofstream gd_function_values_file(gd_function_values_filename);
+  for (auto v : gd_result.objective_values)
+    gd_function_values_file << v << " ";
+  gd_function_values_file.close();
+
+  cout << "Saving sequence of iterates to file: " << gd_iterates_filename
+       << endl;
+  ofstream gd_iterates_file(gd_iterates_filename);
+  for (auto x : gd_result.iterates)
+    gd_iterates_file << x.transpose() << endl;
+  gd_iterates_file.close();
+  std::string tnt_function_values_filename = "tnt_function_values.txt";
+  std::string tnt_iterates_filename = "tnt_iterates.txt";
+
+  cout << "Saving sequence of function values to file: "
+       << tnt_function_values_filename << endl;
+  ofstream tnt_function_values_file(tnt_function_values_filename);
+  for (auto v : tnt_result.objective_values)
+    tnt_function_values_file << v << " ";
+  tnt_function_values_file.close();
+
+  cout << "Saving sequence of iterates to file: " << tnt_iterates_filename
+       << endl;
+  ofstream tnt_iterates_file(tnt_iterates_filename);
+  for (auto x : tnt_result.iterates)
+    tnt_iterates_file << x.transpose() << endl;
+  tnt_iterates_file.close();
 }

@@ -54,7 +54,7 @@ struct GradientDescentParams : public SmoothOptimizerParams {
 
 /** A set of status flags indicating the stopping criterion that triggered
 * algorithm termination */
-enum GradientDescentStatus {
+enum class GradientDescentStatus {
   /** The algorithm obtained a solution satisfying the gradient tolerance */
   GRADIENT,
 
@@ -146,7 +146,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
 
   // Output struct
   GradientDescentResult<Variable> result;
-  result.status = ITERATION_LIMIT;
+  result.status = GradientDescentStatus::ITERATION_LIMIT;
 
   /// INITIALIZATION
 
@@ -155,7 +155,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
   f_x = f(x, args...);
 
   // Compute gradient
-  grad_f_x = grad_f(x);
+  grad_f_x = grad_f(x, args...);
   grad_f_x_norm = sqrt(metric(x, grad_f_x, grad_f_x, args...));
 
   if (params.verbose) {
@@ -175,7 +175,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
     double elapsed_time = Stopwatch::tock(start_time);
 
     if (elapsed_time > params.max_computation_time) {
-      result.status = ELAPSED_TIME;
+      result.status = GradientDescentStatus::ELAPSED_TIME;
       break;
     }
 
@@ -183,6 +183,9 @@ GradientDescent(const Objective<Variable, Args...> &f,
     result.time.push_back(elapsed_time);
     result.objective_values.push_back(f_x);
     result.gradient_norms.push_back(grad_f_x_norm);
+
+    if (params.log_iterates)
+      result.iterates.push_back(x);
 
     if (params.verbose) {
       std::cout << "Iter: ";
@@ -194,7 +197,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
 
     // Test gradient-based stopping criterion
     if (grad_f_x_norm < params.gradient_tolerance) {
-      result.status = GRADIENT;
+      result.status = GradientDescentStatus::GRADIENT;
       break;
     }
 
@@ -218,7 +221,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
 
       // Compute function value at the proposed iterate and its improvement over
       // current iterate
-      f_x_proposed = f(x_proposed);
+      f_x_proposed = f(x_proposed, args...);
       df = f_x - f_x_proposed;
 
       accept = (df > params.sigma * t_A * grad_f_x_norm * grad_f_x_norm);
@@ -233,7 +236,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
 
     // Was linesearch successful?
     if (!accept) {
-      result.status = LINESEARCH;
+      result.status = GradientDescentStatus::LINESEARCH;
       break;
     }
 
@@ -263,17 +266,17 @@ GradientDescent(const Objective<Variable, Args...> &f,
     f_x = f_x_proposed;
 
     // Update gradient
-    grad_f_x = grad_f(x);
+    grad_f_x = grad_f(x, args...);
     grad_f_x_norm = sqrt(metric(x, grad_f_x, grad_f_x, args...));
 
     // Test additional stopping criteria
     if (relative_decrease < params.relative_decrease_tolerance) {
-      result.status = RELATIVE_DECREASE;
+      result.status = GradientDescentStatus::RELATIVE_DECREASE;
       break;
     }
 
     if (h_norm < params.stepsize_tolerance) {
-      result.status = STEPSIZE;
+      result.status = GradientDescentStatus::STEPSIZE;
       break;
     }
 
@@ -296,31 +299,31 @@ GradientDescent(const Objective<Variable, Args...> &f,
 
     // Print the reason for termination
     switch (result.status) {
-    case GRADIENT:
+    case GradientDescentStatus::GRADIENT:
       std::cout << "Found first-order critical point! (Gradient norm: "
                 << grad_f_x_norm << ")" << std::endl;
       break;
-    case RELATIVE_DECREASE:
+    case GradientDescentStatus::RELATIVE_DECREASE:
       std::cout
           << "Algorithm terminated due to insufficient relative decrease: "
           << relative_decrease << " < " << params.relative_decrease_tolerance
           << std::endl;
       break;
-    case STEPSIZE:
+    case GradientDescentStatus::STEPSIZE:
       std::cout
           << "Algorithm terminated due to excessively small step size: |h| = "
           << h_norm << " < " << params.stepsize_tolerance << std::endl;
       break;
-    case LINESEARCH:
+    case GradientDescentStatus::LINESEARCH:
       std::cout << "Algorithm terminated due to linesearch's inability to find "
                    "a stepsize with sufficient decrease"
                 << std::endl;
       break;
-    case ITERATION_LIMIT:
+    case GradientDescentStatus::ITERATION_LIMIT:
       std::cout << "Algorithm exceeded maximum number of outer iterations"
                 << std::endl;
       break;
-    case ELAPSED_TIME:
+    case GradientDescentStatus::ELAPSED_TIME:
       std::cout << "Algorithm exceeded maximum allowed computation time: "
                 << result.elapsed_time << " > " << params.max_computation_time
                 << std::endl;

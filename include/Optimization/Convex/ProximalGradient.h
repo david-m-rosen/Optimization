@@ -324,6 +324,9 @@ ProximalGradientResult<Variable> ProximalGradient(
     result.relative_composite_gradient_norms.push_back(
         relative_composite_gradient_norm);
 
+    if (params.log_iterates)
+      result.iterates.push_back(x_prev);
+
     /// Call user function and pass information about the current iteration,
     /// if one was provided
     if (user_function)
