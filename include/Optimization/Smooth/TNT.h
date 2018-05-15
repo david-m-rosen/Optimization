@@ -34,6 +34,7 @@ namespace Smooth {
  * precisely, this function is called at the end of each major (outer)
  * iteration, and is provided access to the following quantities:
  *
+ * i: index of current iteration
  * t: total elapsed computation time at the *start* of the current iteration
  * x: iterate at the *start* of the current iteration
  * f: objective value at x
@@ -50,12 +51,11 @@ namespace Smooth {
  *            step h was accepted
  */
 template <typename Variable, typename Tangent, typename... Args>
-using TNTUserFunction =
-    std::function<void(double t, const Variable &x, double f, const Tangent &g,
-                       const LinearOperator<Variable, Tangent, Args...> &HessOp,
-                       double Delta, unsigned int num_STPCG_iters,
-                       const Tangent &h, double df, double rho, bool accepted,
-                       Args &... args)>;
+using TNTUserFunction = std::function<void(
+    unsigned int i, double t, const Variable &x, double f, const Tangent &g,
+    const LinearOperator<Variable, Tangent, Args...> &HessOp, double Delta,
+    unsigned int num_STPCG_iters, const Tangent &h, double df, double rho,
+    bool accepted, Args &... args)>;
 
 /** This function implements the Steihaug-Toint truncated preconditioned
  * conjugate-gradient algorithm used to compute the update step in a
@@ -529,7 +529,7 @@ TNT(const Objective<Variable, Args...> &f,
     // Call the user-supplied function to provide access to internal algorithm
     // state
     if (user_function)
-      (*user_function)(elapsed_time, x, f_x, grad, Hess, Delta,
+      (*user_function)(iteration, elapsed_time, x, f_x, grad, Hess, Delta,
                        inner_iterations, h, df, rho, step_accepted, args...);
 
     /// Update cached values if the iterate is accepted

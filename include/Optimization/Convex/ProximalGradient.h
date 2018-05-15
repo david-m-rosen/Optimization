@@ -32,6 +32,7 @@ namespace Convex {
  * precisely, this function is called at the end of each completed iteration,
  * and is provided access to the following quantities:
  *
+ * i: index of current iteration
  * t: total elapsed computation time at the *start* of the current iteration
  * x: iterate at the *start* of the iteration
  * F: function value at the *start* of the current iteration
@@ -43,9 +44,9 @@ namespace Convex {
  */
 template <typename Variable, typename... Args>
 using ProximalGradientUserFunction =
-    std::function<void(double t, const Variable &x, double F, double G_lambda,
-                       unsigned int linesearch_iters, const Variable &dx,
-                       double dF, Args &... args)>;
+    std::function<void(unsigned int i, double t, const Variable &x, double F,
+                       double G_lambda, unsigned int linesearch_iters,
+                       const Variable &dx, double dF, Args &... args)>;
 
 enum ProximalGradientMode {
   /// Basic proximal gradient
@@ -330,8 +331,9 @@ ProximalGradientResult<Variable> ProximalGradient(
     /// Call user function and pass information about the current iteration,
     /// if one was provided
     if (user_function)
-      (*user_function)(elapsed_time, x_prev, F_x_prev, composite_gradient_norm,
-                       linesearch_iters, dx, dF, args...);
+      (*user_function)(i, elapsed_time, x_prev, F_x_prev,
+                       composite_gradient_norm, linesearch_iters, dx, dF,
+                       args...);
 
     /// Test stopping criteria
     if (composite_gradient_norm < params.composite_gradient_tolerance ||

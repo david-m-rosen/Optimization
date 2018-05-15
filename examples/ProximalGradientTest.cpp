@@ -48,13 +48,6 @@ int main() {
     return max(1 - mu * lambda / sqrt(x.dot(x)), 0.0) * x;
   };
 
-  // We will use this user-supplied function to record the sequence of iterates
-  // visited by the method
-  std::vector<Variable> iterates;
-  ProximalGradientUserFunction<Variable> record_iterates =
-      [&](double t, const Variable &x, double F, double r, unsigned int ls,
-          const Variable &dx, double dF) { iterates.push_back(x); };
-
   /// INITIALIZATION
   Variable x0(2);
   x0(0) = 4;
@@ -86,7 +79,7 @@ int main() {
 
   cout << "Optimizing!" << endl << endl;
   ProximalGradientResult<Variable> result = ProximalGradient<Variable>(
-      f, grad_f, g, prox_g, inner_product, x0, params, record_iterates);
+      f, grad_f, g, prox_g, inner_product, x0, params);
 
   cout << "Final result:" << endl;
   cout << "F(x) = " << result.f << endl;

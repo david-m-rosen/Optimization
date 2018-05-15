@@ -23,6 +23,7 @@ namespace Smooth {
  * precisely, this function is called at the end of each iteration, and is
  * provided access to the following quantities:
  *
+ * i: index of current iteration
  * t: total elapsed computation time at the *start* of the current iteration
  * x: iterate at the *start* of the current iteration
  * f: objective value at x
@@ -32,8 +33,9 @@ namespace Smooth {
  */
 template <typename Variable, typename Tangent, typename... Args>
 using GradientDescentUserFunction =
-    std::function<void(double t, const Variable &x, double f, const Tangent &g,
-                       const Tangent &h, double df, Args &... args)>;
+    std::function<void(unsigned int i, double t, const Variable &x, double f,
+                       const Tangent &g, const Tangent &h, double df,
+                       Args &... args)>;
 
 /** A lightweight struct containing a few additional algorithm-specific
  * configuration parameters for a gradient descent optimization method
@@ -255,7 +257,8 @@ GradientDescent(const Objective<Variable, Args...> &f,
     // Call the user-supplied function to provide access to internal algorithm
     // state
     if (user_function)
-      (*user_function)(elapsed_time, x, f_x, grad_f_x, h, df, args...);
+      (*user_function)(iteration, elapsed_time, x, f_x, grad_f_x, h, df,
+                       args...);
 
     // Display output, if requested
     if (params.verbose) {
@@ -358,7 +361,7 @@ GradientDescentResult<Vector> EuclideanGradientDescent(
         EuclideanGradientDescentUserFunction<Vector, Args...>> &user_function =
         std::experimental::nullopt) {
 
-  /// Run TNT algorithm using these Euclidean operators
+  /// Run gradient descent using these Euclidean operators
   return GradientDescent<Vector, Vector, Args...>(
       f, grad_f, EuclideanMetric<Vector, Args...>,
       EuclideanRetraction<Vector, Args...>, x0, args..., params, user_function);
