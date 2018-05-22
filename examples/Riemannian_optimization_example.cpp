@@ -45,9 +45,6 @@ int main() {
         // Euclidean gradient
         Eigen::Vector3d nabla_f = 2 * (X - P);
 
-        // Euclidean Hessian matrix
-        Eigen::Matrix3d H = 2 * Eigen::Matrix3d::Identity();
-
         // Compute Riemannian gradient from Euclidean one
         return project(X, nabla_f);
       };
