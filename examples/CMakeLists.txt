@@ -12,7 +12,7 @@ add_compile_options(-march=native) # Enable faster instruction sets
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 find_package(Eigen3 3.3.3 REQUIRED)
 if(EIGEN3_FOUND)
-message(STATUS "Found Eigen3 library (version ${EIGEN3_VERSION_STRING})")
+message(STATUS "Found Eigen3 library (version ${EIGEN3_VERSION})")
 message(STATUS "Eigen3 include directory: ${EIGEN3_INCLUDE_DIR}\n")
 else()
 message(STATUS "Eigen library not found!")
