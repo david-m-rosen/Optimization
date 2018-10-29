@@ -1,13 +1,3 @@
-# PROJECT CONFIGURATION
-cmake_minimum_required(VERSION 3.1)
-
-# Set this project's configuration
-project(OptimizationExamples C CXX)
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON) # We require C++ 14
-add_compile_options(-march=native) # Enable faster instruction sets
-
-
 # Find Eigen library
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 find_package(Eigen3 3.3.3 REQUIRED)
