@@ -39,13 +39,8 @@ message(STATUS "Found ${PROJECT_NAME} header files:\n ${OPTIMIZATION_HDRS}")
 # List the complete set of header files as source files.
 target_sources(${PROJECT_NAME} INTERFACE ${OPTIMIZATION_HDRS})
 
-# Create a .cmake file for the Optimization library to make it available to other CMake projects
-export(TARGETS ${PROJECT_NAME} FILE ${PROJECT_NAME}.cmake)
 
-# Add this project to the CMake package registry, so that it can easily be found and imported by other CMake projects
-export(PACKAGE ${PROJECT_NAME})
-
-# Add a custom target
+# Define some additional (optional) named targets, not built by default.  Typically, these will be e.g. unit tests, example executables.
 
 # This is the name of the target in the generated Makefile that builds the example executables; i.e., to build these, one must type "make $EXAMPLES_TARGET_NAME" using the generated Makefile in order to build the example executables (we do this because we don't want these executables to be automatically built by other CMake projects that use this one as a dependency)
 set(EXAMPLES_TARGET_NAME examples)
@@ -56,3 +51,9 @@ message(STATUS "CMake configuration finished.\n\nType 'make ${EXAMPLES_TARGET_NA
 
 
 
+# EXPORT OPTIMIZATION LIBRARY 
+
+# Add add entry for this project into CMake's package registry, so that this project can be found by other CMake projects
+export(PACKAGE ${PROJECT_NAME})
+# Create a configuration file for this project, so that it can be imported by other CMake projects
+export(TARGETS ${PROJECT_NAME} FILE ${PROJECT_NAME}Config.cmake)
