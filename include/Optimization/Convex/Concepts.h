@@ -52,14 +52,22 @@ template <typename Variable, typename... Args>
 using InnerProduct =
     std::function<double(const Variable &X, const Variable &Y, Args &... args)>;
 
-/** An alias template for a proximal operator of a function f: given a Variable
- * x and a scalar lambda > 0, this function computes and returns the value of
- * the scaled proximal operator prox_{lambda f}(x):
+/** An alias template for a linear operator A : X -> Y between two (possibly
+ * distinct) linear spaces.
+ */
+template <typename VariableX, typename VariableY, typename... Args>
+using LinearOperator =
+    std::function<VariableY(const VariableX &X, Args &... args)>;
+
+/** An alias template for a proximal operator of a function f: given a
+ * Variable x and a scalar lambda > 0, this function computes and returns
+ * the value of the scaled proximal operator prox_{lambda f}(x):
  *
  * prox_{lambda f}(x) := argmin_z [ f(z) + (1 / (2*lambda)) ||z - x||_2 ]
  */
 template <typename Variable, typename... Args>
 using ProximalOperator =
     std::function<Variable(const Variable &X, double lambda, Args &... args)>;
-}
-}
+
+} // namespace Convex
+} // namespace Optimization

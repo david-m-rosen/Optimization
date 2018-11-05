@@ -33,6 +33,7 @@ set(OPTIMIZATION_HDRS
     ${OPTIMIZATION_TOPLEVEL_DIR}/Smooth/TNT.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/Concepts.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/ProximalGradient.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/ADMM.h
     )
 message(STATUS "Found ${PROJECT_NAME} header files:\n ${OPTIMIZATION_HDRS}")
 
