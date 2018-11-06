@@ -1,14 +1,14 @@
 /** This header file provides several lightweight template classes implementing
-* proximal gradient algorithms for minimizing a sum of the form
-*
-* F(x) := f(x) + g(x),
-*
-* where f and g are convex and f is continuously differentiable.  This
-* implementation is based upon the algorithm described in Section 4.2 of Parikh
-* and Boyd's monograph "Proximal Algorithms".
-*
-* Copyright (C) 2017 by David M. Rosen (drosen2000@gmail.com)
-*/
+ * proximal gradient algorithms for minimizing a sum of the form
+ *
+ * F(x) := f(x) + g(x),
+ *
+ * where f and g are convex and f is continuously differentiable.  This
+ * implementation is based upon the algorithm described in Section 4.2 of Parikh
+ * and Boyd's monograph "Proximal Algorithms".
+ *
+ * Copyright (C) 2017 by David M. Rosen (drosen2000@gmail.com)
+ */
 
 #pragma once
 
@@ -48,7 +48,7 @@ using ProximalGradientUserFunction =
                        double G_lambda, unsigned int linesearch_iters,
                        const Variable &dx, double dF, Args &... args)>;
 
-enum ProximalGradientMode {
+enum class ProximalGradientMode {
   /// Basic proximal gradient
   SIMPLE,
 
@@ -60,7 +60,7 @@ enum ProximalGradientMode {
 struct ProximalGradientParams : public OptimizerParams {
 
   /// Algorithm mode
-  ProximalGradientMode mode = ACCELERATED;
+  ProximalGradientMode mode = ProximalGradientMode::ACCELERATED;
 
   /// Step control parameters
 
@@ -99,7 +99,7 @@ struct ProximalGradientParams : public OptimizerParams {
   double relative_composite_gradient_tolerance = 1e-3;
 };
 
-enum ProximalGradientStatus {
+enum class ProximalGradientStatus {
   PROX_GRAD_RESIDUAL,
   ITERATION_LIMIT,
   LINESEARCH,
@@ -200,7 +200,7 @@ ProximalGradientResult<Variable> ProximalGradient(
 
   /// Output struct
   ProximalGradientResult<Variable> result;
-  result.status = ITERATION_LIMIT;
+  result.status = ProximalGradientStatus::ITERATION_LIMIT;
 
   /// INITIALIZATION
   x_prev = x0;
@@ -271,7 +271,7 @@ ProximalGradientResult<Variable> ProximalGradient(
     if (params.linesearch && (linesearch_iters > params.max_LS_iterations)) {
       // The linesearch was unable to make sufficient progress in the allotted
       // number of iterations
-      result.status = LINESEARCH;
+      result.status = ProximalGradientStatus::LINESEARCH;
       break;
     }
 
@@ -339,15 +339,15 @@ ProximalGradientResult<Variable> ProximalGradient(
     if (composite_gradient_norm < params.composite_gradient_tolerance ||
         relative_composite_gradient_norm <
             params.relative_composite_gradient_tolerance) {
-      result.status = PROX_GRAD_RESIDUAL;
+      result.status = ProximalGradientStatus::PROX_GRAD_RESIDUAL;
       break;
     }
     if (Stopwatch::tock(start_time) > params.max_computation_time) {
-      result.status = ELAPSED_TIME;
+      result.status = ProximalGradientStatus::ELAPSED_TIME;
       break;
     }
 
-    if (params.mode == ACCELERATED) {
+    if (params.mode == ProximalGradientMode::ACCELERATED) {
 
       /// Parameter update and caching for this iteation
 
@@ -390,22 +390,22 @@ ProximalGradientResult<Variable> ProximalGradient(
 
     // Print the reason for termination
     switch (result.status) {
-    case PROX_GRAD_RESIDUAL:
+    case ProximalGradientStatus::PROX_GRAD_RESIDUAL:
       std::cout << "Found minimizer! (Composite gradient norm: "
                 << composite_gradient_norm
                 << ", relative composite gradient norm: "
                 << relative_composite_gradient_norm << ")" << std::endl;
       break;
-    case ITERATION_LIMIT:
+    case ProximalGradientStatus::ITERATION_LIMIT:
       std::cout << "Algorithm exceeded maximum number of outer iterations"
                 << std::endl;
       break;
-    case LINESEARCH:
+    case ProximalGradientStatus::LINESEARCH:
       std::cout << "Linesearch was unable to find an update with adequate "
                    "progress in the allotted number of iterations!"
                 << std::endl;
       break;
-    case ELAPSED_TIME:
+    case ProximalGradientStatus::ELAPSED_TIME:
       std::cout << "Algorithm exceeded maximum allowed computation time: "
                 << result.elapsed_time << " > " << params.max_computation_time
                 << std::endl;
@@ -421,6 +421,6 @@ ProximalGradientResult<Variable> ProximalGradient(
   return result;
 }
 
-} // Convex
+} // namespace Convex
 
-} // Optimization
+} // namespace Optimization
