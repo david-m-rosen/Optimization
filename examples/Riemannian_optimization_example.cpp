@@ -41,7 +41,6 @@ int main() {
   /// Gradient
   Optimization::Smooth::VectorField<Vector, Vector, Vector> grad_F =
       [&project](const Vector &X, const Vector &P) {
-
         // Euclidean gradient
         Eigen::Vector3d nabla_f = 2 * (X - P);
 
@@ -51,27 +50,27 @@ int main() {
 
   /// Local quadratic model function:  this constructs the (Riemannian) gradient
   /// and model Hessian operator for f at x.
-  Optimization::Smooth::QuadraticModel<Vector, Vector, Vector> QM = [&project](
-      const Vector &X, Vector &grad,
-      Optimization::Smooth::LinearOperator<Vector, Vector, Vector> &Hessian,
-      const Vector &P) {
+  Optimization::Smooth::QuadraticModel<Vector, Vector, Vector> QM =
+      [&project](
+          const Vector &X, Vector &grad,
+          Optimization::Smooth::LinearOperator<Vector, Vector, Vector> &Hessian,
+          const Vector &P) {
+        // Euclidean gradient
+        Eigen::Vector3d nabla_f = 2 * (X - P);
 
-    // Euclidean gradient
-    Eigen::Vector3d nabla_f = 2 * (X - P);
+        // Euclidean Hessian matrix
+        Eigen::Matrix3d H = 2 * Eigen::Matrix3d::Identity();
 
-    // Euclidean Hessian matrix
-    Eigen::Matrix3d H = 2 * Eigen::Matrix3d::Identity();
+        // Compute Riemannian gradient from Euclidean one
+        grad = project(X, nabla_f);
 
-    // Compute Riemannian gradient from Euclidean one
-    grad = project(X, nabla_f);
-
-    // Return Riemannian Hessian-vector product operator using the
-    // Euclidean Hessian
-    Hessian = [&project, H, nabla_f](const Vector &X, const Vector &Xdot,
-                                     const Vector &P) {
-      return project(X, H * Xdot) - X.dot(nabla_f) * Xdot;
-    };
-  };
+        // Return Riemannian Hessian-vector product operator using the
+        // Euclidean Hessian
+        Hessian = [&project, H, nabla_f](const Vector &X, const Vector &Xdot,
+                                         const Vector &P) {
+          return project(X, H * Xdot) - X.dot(nabla_f) * Xdot;
+        };
+      };
 
   /// Riemannian metric on S^2: this is just the usual inner-product on R^3
   Optimization::Smooth::RiemannianMetric<Vector, Vector, Vector> metric =
@@ -138,38 +137,38 @@ int main() {
 
   /// SAVE STATE TRACES TO DISK
 
-  cout << "Saving state traces" << endl;
+  //  cout << "Saving state traces" << endl;
 
-  std::string gd_function_values_filename = "gd_function_values.txt";
-  std::string gd_iterates_filename = "gd_iterates.txt";
+  //  std::string gd_function_values_filename = "gd_function_values.txt";
+  //  std::string gd_iterates_filename = "gd_iterates.txt";
 
-  cout << "Saving sequence of function values to file: "
-       << gd_function_values_filename << endl;
-  ofstream gd_function_values_file(gd_function_values_filename);
-  for (auto v : gd_result.objective_values)
-    gd_function_values_file << v << " ";
-  gd_function_values_file.close();
+  //  cout << "Saving sequence of function values to file: "
+  //       << gd_function_values_filename << endl;
+  //  ofstream gd_function_values_file(gd_function_values_filename);
+  //  for (auto v : gd_result.objective_values)
+  //    gd_function_values_file << v << " ";
+  //  gd_function_values_file.close();
 
-  cout << "Saving sequence of iterates to file: " << gd_iterates_filename
-       << endl;
-  ofstream gd_iterates_file(gd_iterates_filename);
-  for (auto x : gd_result.iterates)
-    gd_iterates_file << x.transpose() << endl;
-  gd_iterates_file.close();
-  std::string tnt_function_values_filename = "tnt_function_values.txt";
-  std::string tnt_iterates_filename = "tnt_iterates.txt";
+  //  cout << "Saving sequence of iterates to file: " << gd_iterates_filename
+  //       << endl;
+  //  ofstream gd_iterates_file(gd_iterates_filename);
+  //  for (auto x : gd_result.iterates)
+  //    gd_iterates_file << x.transpose() << endl;
+  //  gd_iterates_file.close();
+  //  std::string tnt_function_values_filename = "tnt_function_values.txt";
+  //  std::string tnt_iterates_filename = "tnt_iterates.txt";
 
-  cout << "Saving sequence of function values to file: "
-       << tnt_function_values_filename << endl;
-  ofstream tnt_function_values_file(tnt_function_values_filename);
-  for (auto v : tnt_result.objective_values)
-    tnt_function_values_file << v << " ";
-  tnt_function_values_file.close();
+  //  cout << "Saving sequence of function values to file: "
+  //       << tnt_function_values_filename << endl;
+  //  ofstream tnt_function_values_file(tnt_function_values_filename);
+  //  for (auto v : tnt_result.objective_values)
+  //    tnt_function_values_file << v << " ";
+  //  tnt_function_values_file.close();
 
-  cout << "Saving sequence of iterates to file: " << tnt_iterates_filename
-       << endl;
-  ofstream tnt_iterates_file(tnt_iterates_filename);
-  for (auto x : tnt_result.iterates)
-    tnt_iterates_file << x.transpose() << endl;
-  tnt_iterates_file.close();
+  //  cout << "Saving sequence of iterates to file: " << tnt_iterates_filename
+  //       << endl;
+  //  ofstream tnt_iterates_file(tnt_iterates_filename);
+  //  for (auto x : tnt_result.iterates)
+  //    tnt_iterates_file << x.transpose() << endl;
+  //  tnt_iterates_file.close();
 }
