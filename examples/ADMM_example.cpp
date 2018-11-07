@@ -33,8 +33,8 @@ int main() {
 
   /// SETUP
 
-  unsigned int m = 1500;  // Dimensionality of observations
-  unsigned int n = 5000;  // Dimensionality of latent vector x
+  unsigned int m = 150;   // Dimensionality of observations
+  unsigned int n = 500;   // Dimensionality of latent vector x
   unsigned int nnz = 100; // Number of nonzero elements of x
   double sigma = .1; // Standard deviation of additive noise on measurements
   double mu;         // Regularization parameter for Lasso
@@ -87,7 +87,7 @@ int main() {
 
   /// SET UP ADMM
   cout << endl;
-  cout << "Setting up ADMM ... " << endl;
+  cout << "Setting up ADMM ... " << endl << endl;
 
   // ADMM params
   ADMMParams params;
@@ -95,13 +95,13 @@ int main() {
   params.verbose = true; // Turn on verbose output
   params.log_iterates = true;
   params.penalty_adaptation_mode = ADMMPenaltyAdaptation::Residual_Balance;
-  params.penalty_adaptation_period = 2;
+  params.penalty_adaptation_period = 1;
 
   // Set the stopping criteria for this example to match those used in
   // the reference paper
   params.eps_rel = 1e-2;
-  params.eps_abs_pri = sqrt(n) * 1e-4;
-  params.eps_abs_dual = sqrt(n) * 1e-4;
+  params.eps_abs_pri = sqrt(n) * 1e-3;
+  params.eps_abs_dual = sqrt(n) * 1e-3;
 
   /// Minimization over x:
   ///
@@ -181,10 +181,8 @@ int main() {
   VectorXd Z = VectorXd::Zero(n);
 
   /// RUN ADMM!
-  cout << "STARTING ADMM!!!" << endl << endl;
   auto result = ADMM<VectorXd>(minLx, minLy, Aop, Bop, Aop, inner_product, Z, Z,
                                Z, params);
-  cout << "ADMM FINISHED!!! " << endl << endl;
 
   /// PROCESS OUTPUT
 
@@ -198,7 +196,8 @@ int main() {
   string objective_values_filename = "objective_values.txt";
   string penalty_values_filename = "penalty_values.txt";
 
-  cout << "Writing out primal residuals to file: " << primal_residuals_filename
+  cout << endl
+       << "Writing out primal residuals to file: " << primal_residuals_filename
        << " ... " << endl;
   ofstream primal_residuals_file(primal_residuals_filename);
   for (const auto &r : result.primal_residuals)

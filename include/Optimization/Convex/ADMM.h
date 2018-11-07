@@ -205,70 +205,65 @@ double spectral_penalty_parameter_update(
     const InnerProduct<VariableR, Args...> &inner_product, double eps_cor,
     double rho, Args... args) {
 
+  /// Some convenient aliases to make this easier on the eyes :-P
+  const VariableR &dlh = delta_lambda_hat;
+  const VariableR &dl = delta_lambda;
+  const VariableR &dH = delta_H_hat;
+  const VariableR &dG = delta_G_hat;
+
   /// First, compute steepest descent and minimum-gradient stepsizes
 
-  // Compute and cache a bunch of pair-wise inner products for computing alphas
-  double delta_lambda_hat_delta_lambda_hat =
-      inner_product(delta_lambda_hat, delta_lambda_hat, args...);
+  // Compute and cache a bunch of pair-wise inner products for alphas
+  double dlh_dlh = inner_product(dlh, dlh, args...);
+  double dH_dlh = inner_product(dH, dlh, args...);
+  double dH_dH = inner_product(dH, dH, args...);
 
-  double delta_H_hat_delta_lambda_hat =
-      inner_product(delta_H_hat, delta_lambda_hat, args...);
-
-  double delta_H_hat_delta_H_hat =
-      inner_product(delta_H_hat, delta_H_hat, args...);
-
-  // Compute and cache a bunch of pair-wise inner products for computing betas
-  double delta_lambda_delta_lambda =
-      inner_product(delta_lambda, delta_lambda, args...);
-
-  double delta_G_hat_delta_lambda =
-      inner_product(delta_G_hat, delta_lambda, args...);
-
-  double delta_G_hat_delta_G_hat =
-      inner_product(delta_G_hat, delta_G_hat, args...);
+  // Compute and cache a bunch of pair-wise inner products for betas
+  double dl_dl = inner_product(dl, dl, args...);
+  double dG_dl = inner_product(dG, dl, args...);
+  double dG_dG = inner_product(dG, dG, args...);
 
   // Compute stepsizes using equation (26) -- (28) from the paper
 
   /// alphas
 
-  // alpha_SD = <delta_lambda_hat, delta_lambda_hat> /
-  //            <delta_H_hat, delta_lambda_hat>
-  double alpha_SD =
-      delta_lambda_hat_delta_lambda_hat / delta_H_hat_delta_lambda_hat;
+  // alpha_SD = <dlambda_hat, dlambda_hat> / <dH, dlambda_hat> (eq. 26)
+  double alpha_SD = dlh_dlh / dH_dlh;
 
-  // alpha_MG = <delta_H_hat, delta_lambda_hat> / <delta_H_hat, delta_H_hat>
-  double alpha_MG = delta_H_hat_delta_lambda_hat / delta_H_hat_delta_H_hat;
+  // alpha_MG = <dH, dlambda_hat> / <dH, dH> (eq. 26)
+  double alpha_MG = dH_dlh / dH_dH;
 
   /// betas
 
-  // beta_SD = <delta_lambda, delta_lambda> / <delta_G_hat, delta_lambda>
-  double beta_SD = delta_lambda_delta_lambda / delta_G_hat_delta_lambda;
+  // beta_SD = <dlambda, dlambda> / <dG, dlambda>
+  double beta_SD = dl_dl / dG_dl;
 
-  // beta_MG = <delta_G_hat, delta_lambda> / <delta_G_hat, delta_G_hat>
-  double beta_MG = delta_G_hat_delta_lambda / delta_G_hat_delta_G_hat;
+  // beta_MG = <dG, dlambda> / <dG, dG>
+  double beta_MG = dG_dl / dG_dG;
 
   /// Compute hybrid stepsizes following the recommendation of the paper
-  /// "Gradient Methods with Adaptive Step-Sizes", by B. Zhou, L. Gao, and Y.-H.
-  /// Dai
+  /// "Gradient Methods with Adaptive Step-Sizes", by B. Zhou, L. Gao, and
+  /// Y.-H. Dai
 
   // Equation (27) from "Adaptive ADMM ..."
 
   double alpha =
-      ((2 * alpha_MG) > alpha_SD ? alpha_MG : alpha_SD - (alpha_MG / 2));
+      ((2 * alpha_MG) > alpha_SD ? alpha_MG : alpha_SD - .5 * alpha_MG);
 
-  double beta = ((2 * beta_MG) > beta_SD ? beta_MG : beta_SD - (beta_MG / 2));
+  double beta = ((2 * beta_MG) > beta_SD ? beta_MG : beta_SD - .5 * beta_MG);
 
   // Compute "correlations" (eq. 29)
 
-  double delta_lambda_hat_norm = sqrt(delta_lambda_hat_delta_lambda_hat);
+  double dlh_norm = sqrt(dlh_dlh);
+  double dl_norm = sqrt(dl_dl);
+  double dH_norm = sqrt(dH_dH);
+  double dG_norm = sqrt(dG_dG);
 
-  double alpha_cor = delta_H_hat_delta_lambda_hat /
-                     (sqrt(delta_H_hat_delta_H_hat) * delta_lambda_hat_norm);
+  // alpha_cor = <dH, dlambda_hat> / (|dH| * |dlambda_hat|)
+  double alpha_cor = dH_dlh / (dH_norm * dlh_norm);
 
-  double delta_lambda_norm = sqrt(delta_lambda_delta_lambda);
-
-  double beta_cor = delta_G_hat_delta_lambda /
-                    (sqrt(delta_G_hat_delta_G_hat) * delta_lambda_norm);
+  // beta_cor = <dG, dlambda> / (|dG| * |dlambda|)
+  double beta_cor = dG_dl / (dG_norm * dl_norm);
 
   // Implement safeguarding strategy (eq. (30)) and return
 
@@ -307,7 +302,6 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   VariableR lambda;
 
   // Previous iterate of y (needed for the dual residual computation)
-
   VariableX y_prev;
 
   // Current value of augmented Lagrangian penalty parameter
@@ -330,8 +324,13 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   /// Extra variables required for the spectral penalty parameter estimation
   /// procedure
 
+  // An auxiliary variable required for the spectral penalty parameter update,
+  // cf. Section 2.3 of the paper "Adaptive ADMM with Spectral Penalty Parameter
+  // Selection", by Z. Xu, M.A.T. Figueiredo, and T. Goldstein
   VariableR lambda_hat;
 
+  // Cached values of the variables x, y, lambda, and lambda_hat from the last
+  // iteration k0 at which the penalty parameter was updated
   VariableX x_k0;
   VariableY y_k0;
   VariableR lambda_k0, lambda_hat_k0;
@@ -341,21 +340,23 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   result.status = ADMMStatus::ITERATION_LIMIT;
 
   /// INITIALIZATION
-
   x = x0;
   y = y0;
   y_prev = y0;
+  Ax = A(x, args...);
+  By = B(y, args...);
   rho = params.rho;
+
   // Compute initial value of dual variable lambda
-  lambda = rho * (A(x) + B(y) - c);
+  lambda = rho * (Ax + By - c);
 
   if (params.penalty_adaptation_mode == ADMMPenaltyAdaptation::Spectral) {
-    // Additional initializations for spectral penalty adaptation procedure
+    /// Additional initializations for spectral penalty adaptation procedure
     x_k0 = x;
     y_k0 = y;
     lambda_k0 = lambda;
     lambda_hat_k0 = lambda;
-  }
+  } // spectral update initialization
 
   if (params.verbose) {
     std::cout << std::scientific;
@@ -371,46 +372,52 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   auto start_time = Stopwatch::tick();
   for (unsigned int i = 0; i < params.max_iterations; ++i) {
 
-    // Record the elapsed time at the START of this iteration
-    double elapsed_time = Stopwatch::tock(start_time);
-
-    // Test elapsed-time-based stopping criterion
-    if (elapsed_time > params.max_computation_time) {
-      result.status = ADMMStatus::ELAPSED_TIME;
-      break;
-    }
-
     /// ADMM ITERATION
-    // Update x by minimizing augmented Lagrangian with respect to x
+
+    /// UPDATE X
+    // Update x by minimizing augmented Lagrangian with respect to x (eq. 3.2)
     x = minLx(x, y, lambda, rho, args...);
+    Ax = A(x, args...);
 
-    // Update y by minimizing augmented Lagrangian with respect to y
-    y = minLy(x, y, lambda, rho, args...);
-
-    // Compute primal residual vector
-    Ax = A(x);
-    By = B(y);
-    r = Ax + By - c;
-
+    // Compute lambda_hat for spectral penalty parameter update, if needed
     if ((params.penalty_adaptation_mode == ADMMPenaltyAdaptation::Spectral) &&
         ((i % params.penalty_adaptation_period) == 0) &&
         (i < params.penalty_adaptation_window)) {
-      // Compute lambda_hat *before* updating lambda
-      lambda_hat = lambda + rho * (Ax + B(y_prev) - c);
+
+      // When using spectral penalty adaptation, we compute lambda_hat *AFTER*
+      // updating x but *BEFORE* updating y and lambda: this corresponds to
+      // using the y and lambda values computed during the *PREVIOUS* iteration
+      // (cf. the definition of lambda_hat given in Sec. 2.3 of the paper
+      // "Adaptive ADMM with Spectral Penalty Parameter Selection", by Z. Xu,
+      // M.A.T. Figueiredo, and T. Goldstein)
+      lambda_hat = lambda + rho * (Ax + By - c);
     }
 
-    // Update dual variable lambda
+    /// UPDATE Y
+    // Update y by minimizing augmented Lagrangian with respect to y (eq. 3.3)
+    y = minLy(x, y, lambda, rho, args...);
+    By = B(y, args...);
+
+    /// UPDATE PRIMAL RESIDUAL
+    // Compute primal residual vector r (Sec. 3.3)
+    r = Ax + By - c;
+
+    /// UPDATE LAMBDA
+    // Update dual variable lambda (eq. 3.4), w/ r = Ax + By -c
     lambda = lambda + rho * r;
 
-    // Compute dual residual vector
+    /// UPDATE DUAL RESIDUAL
+    // Compute dual residual vector s (Sec. 3.3)
     s = rho * At(B(y - y_prev, args...), args...);
 
     // Compute primal and dual residual norms
     primal_residual = sqrt(inner_product_r(r, r, args...));
     dual_residual = sqrt(inner_product_x(s, s, args...));
 
-    /// Display output for this iteration
+    // Record the elapsed time at the END of this iteration
+    double elapsed_time = Stopwatch::tock(start_time);
 
+    /// Display output for this iteration
     // Display information about this iteration, if requested
     if (params.verbose) {
       std::cout << "Iter: ";
@@ -434,8 +441,13 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
       result.iterates.emplace_back(x, y);
 
     /// TEST STOPPING CRITERIA
+    // Test elapsed-time-based stopping criterion
+    if (elapsed_time > params.max_computation_time) {
+      result.status = ADMMStatus::ELAPSED_TIME;
+      break;
+    }
 
-    /// Compute primal and dual stopping tolerances
+    /// Compute primal and dual stopping tolerances (Sec. 3.3.1)
     // Primal stopping tolerance
     double Ax_norm = sqrt(inner_product_r(Ax, Ax, args...));
     double By_norm = sqrt(inner_product_r(By, By, args...));
@@ -449,7 +461,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
         sqrt(inner_product_x(At_lambda, At_lambda, args...));
     double eps_dual = params.eps_abs_dual + params.eps_rel * At_lambda_norm;
 
-    // Test residual-based stopping criterion
+    /// Test residual-based stopping criterion
     if ((primal_residual < eps_primal) && (dual_residual < eps_dual)) {
       result.status = ADMMStatus::RESIDUAL_TOLERANCE;
       break;
@@ -460,9 +472,8 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     if ((params.penalty_adaptation_mode != ADMMPenaltyAdaptation::None) &&
         ((i % params.penalty_adaptation_period) == 0) &&
         (i < params.penalty_adaptation_window)) {
-      // Update penalty parameter
 
-      /// Residual balancing
+      // Residual balancing (eq. 3.13)
       if (params.penalty_adaptation_mode ==
           ADMMPenaltyAdaptation::Residual_Balance) {
         rho = residual_balance_penalty_parameter_update(
@@ -473,7 +484,9 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
       /// Spectral parameter update
       if (params.penalty_adaptation_mode == ADMMPenaltyAdaptation::Spectral) {
 
-        // delta lambda
+        /// Compute finite-difference variables, following the definitions given
+        /// in Sec. 3.2 of the paper "Adaptive ADMM with Spectral Penalty
+        /// Parameter Selection"
         VariableR delta_lambda = lambda - lambda_k0;
         VariableR delta_lambda_hat = lambda_hat - lambda_hat_k0;
 
@@ -482,13 +495,14 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
         // used in their version of the augmented Lagrangian relative to ours;
         // therefore, we must use a negative sign in front of our linear
         // operators
-        VariableR delta_H = -A(x - x_k0, args...);
-        VariableR delta_G = -B(y - y_k0, args...);
+        VariableR delta_H_hat = -A(x - x_k0, args...);
+        VariableR delta_G_hat = -B(y - y_k0, args...);
 
         // Update rho
         rho = spectral_penalty_parameter_update<VariableR, Args...>(
-            delta_lambda_hat, delta_lambda, delta_H, delta_G, inner_product_r,
-            params.spectral_penalty_minimum_correlation, rho, args...);
+            delta_lambda_hat, delta_lambda, delta_H_hat, delta_G_hat,
+            inner_product_r, params.spectral_penalty_minimum_correlation, rho,
+            args...);
 
         /// Cache these values
         x_k0 = x;
@@ -528,8 +542,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
       break;
     }
 
-    std::cout << std::endl
-              << "Final primal residual: " << primal_residual
+    std::cout << "Final primal residual: " << primal_residual
               << ", final dual residual: " << dual_residual
               << ", total elapsed computation time: " << result.elapsed_time
               << " seconds" << std::endl;
