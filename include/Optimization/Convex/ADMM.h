@@ -37,17 +37,13 @@ namespace Convex {
 
 template <typename VariableX, typename VariableY, typename VariableR,
           typename... Args>
-using AugLagMinX =
-    std::function<VariableX(const VariableX &x, const VariableY &y,
-                            const VariableR &lambda, double rho,
-                            Args &... args)>;
+using AugLagMinX = std::function<VariableX(
+    const VariableY &y, const VariableR &lambda, double rho, Args &... args)>;
 
 template <typename VariableX, typename VariableY, typename VariableR,
           typename... Args>
-using AugLagMinY =
-    std::function<VariableY(const VariableX &x, const VariableY &y,
-                            const VariableR &lambda, double rho,
-                            Args &... args)>;
+using AugLagMinY = std::function<VariableY(
+    const VariableX &x, const VariableR &lambda, double rho, Args &... args)>;
 
 /** A simple enumeration type describing the strategy used to adapt the penalty
  * parameter rho in the augmented Lagrangian */
@@ -302,7 +298,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   VariableR lambda;
 
   // Previous iterate of y (needed for the dual residual computation)
-  VariableX y_prev;
+  VariableY y_prev;
 
   // Current value of augmented Lagrangian penalty parameter
   double rho;
@@ -376,7 +372,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
 
     /// UPDATE X
     // Update x by minimizing augmented Lagrangian with respect to x (eq. 3.2)
-    x = minLx(x, y, lambda, rho, args...);
+    x = minLx(y, lambda, rho, args...);
     Ax = A(x, args...);
 
     // Compute lambda_hat for spectral penalty parameter update, if needed
@@ -395,7 +391,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
 
     /// UPDATE Y
     // Update y by minimizing augmented Lagrangian with respect to y (eq. 3.3)
-    y = minLy(x, y, lambda, rho, args...);
+    y = minLy(x, lambda, rho, args...);
     By = B(y, args...);
 
     /// UPDATE PRIMAL RESIDUAL
@@ -495,8 +491,8 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
         // used in their version of the augmented Lagrangian relative to ours;
         // therefore, we must use a negative sign in front of our linear
         // operators
-        VariableR delta_H_hat = -A(x - x_k0, args...);
-        VariableR delta_G_hat = -B(y - y_k0, args...);
+        VariableR delta_H_hat = A(x_k0 - x, args...);
+        VariableR delta_G_hat = B(y_k0 - y, args...);
 
         // Update rho
         rho = spectral_penalty_parameter_update<VariableR, Args...>(

@@ -11,6 +11,8 @@ using namespace Optimization::Convex;
 using namespace Eigen;
 using namespace std;
 
+bool write_output = false;
+
 int main() {
   /// Here we solve the small dense LASSO regression problem:
   ///
@@ -127,8 +129,7 @@ int main() {
   // Construct x-minimization function, making use of the (cached)
   // coefficient matrix A and Cholesky factor L
   AugLagMinX<VectorXd, VectorXd, VectorXd> minLx =
-      [&](const VectorXd &x, const VectorXd &y, const VectorXd &lambda,
-          double rho) -> VectorXd {
+      [&](const VectorXd &y, const VectorXd &lambda, double rho) -> VectorXd {
     // Compute Cholseky factorization of A^T*A + rho * I
     LLT<MatrixXd> L(AtA + rho * MatrixXd::Identity(n, n));
 
@@ -162,8 +163,7 @@ int main() {
   };
 
   AugLagMinY<VectorXd, VectorXd, VectorXd> minLy =
-      [&](const VectorXd &x, const VectorXd &y, const VectorXd &lambda,
-          double rho) -> VectorXd {
+      [&](const VectorXd &x, const VectorXd &lambda, double rho) -> VectorXd {
     return S(x + (1 / rho) * lambda, mu / rho);
   };
 
@@ -186,42 +186,44 @@ int main() {
 
   /// PROCESS OUTPUT
 
-  // Define a lambda function that computes the objective of the LASSO problem
-  auto f = [&](const std::pair<VectorXd, VectorXd> &p) {
-    return .5 * (A * p.first - b).squaredNorm() + mu * p.first.lpNorm<1>();
-  };
+  if (write_output) {
+    // Define a lambda function that computes the objective of the LASSO problem
+    auto f = [&](const std::pair<VectorXd, VectorXd> &p) {
+      return .5 * (A * p.first - b).squaredNorm() + mu * p.first.lpNorm<1>();
+    };
 
-  string primal_residuals_filename = "primal_residuals.txt";
-  string dual_residuals_filename = "dual_residuals.txt";
-  string objective_values_filename = "objective_values.txt";
-  string penalty_values_filename = "penalty_values.txt";
+    string primal_residuals_filename = "primal_residuals.txt";
+    string dual_residuals_filename = "dual_residuals.txt";
+    string objective_values_filename = "objective_values.txt";
+    string penalty_values_filename = "penalty_values.txt";
 
-  cout << endl
-       << "Writing out primal residuals to file: " << primal_residuals_filename
-       << " ... " << endl;
-  ofstream primal_residuals_file(primal_residuals_filename);
-  for (const auto &r : result.primal_residuals)
-    primal_residuals_file << r << " ";
-  primal_residuals_file.close();
+    cout << endl
+         << "Writing out primal residuals to file: "
+         << primal_residuals_filename << " ... " << endl;
+    ofstream primal_residuals_file(primal_residuals_filename);
+    for (const auto &r : result.primal_residuals)
+      primal_residuals_file << r << " ";
+    primal_residuals_file.close();
 
-  cout << "Writing out dual residuals to file: " << dual_residuals_filename
-       << " ... " << endl;
-  ofstream dual_residuals_file(dual_residuals_filename);
-  for (const auto &d : result.dual_residuals)
-    dual_residuals_file << d << " ";
-  dual_residuals_file.close();
+    cout << "Writing out dual residuals to file: " << dual_residuals_filename
+         << " ... " << endl;
+    ofstream dual_residuals_file(dual_residuals_filename);
+    for (const auto &d : result.dual_residuals)
+      dual_residuals_file << d << " ";
+    dual_residuals_file.close();
 
-  cout << "Writing out objective values to file: " << objective_values_filename
-       << " ... " << endl;
-  ofstream objective_values_file(objective_values_filename);
-  for (const auto &p : result.iterates)
-    objective_values_file << f(p) << " ";
-  objective_values_file.close();
+    cout << "Writing out objective values to file: "
+         << objective_values_filename << " ... " << endl;
+    ofstream objective_values_file(objective_values_filename);
+    for (const auto &p : result.iterates)
+      objective_values_file << f(p) << " ";
+    objective_values_file.close();
 
-  cout << "Writing out penalty values to file: " << penalty_values_filename
-       << " ... " << endl;
-  ofstream penalty_values_file(penalty_values_filename);
-  for (const auto &rho : result.penalty_parameters)
-    penalty_values_file << rho << " ";
-  penalty_values_file.close();
+    cout << "Writing out penalty values to file: " << penalty_values_filename
+         << " ... " << endl;
+    ofstream penalty_values_file(penalty_values_filename);
+    for (const auto &rho : result.penalty_parameters)
+      penalty_values_file << rho << " ";
+    penalty_values_file.close();
+  }
 }
