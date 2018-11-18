@@ -21,7 +21,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <experimental/optional>
+#include <functional>
 #include <iostream>
+#include <limits>
 
 namespace Optimization {
 namespace Convex {
@@ -30,7 +33,7 @@ namespace Convex {
  * Lagrangian:
  *
  * L_rho(x, y, lambda) := f(x) + g(y) + lambda' * (Ax + By - c)
- *                          + (rho / 2) * |Ax + By - c |_2^2
+ *                          + (rho / 2) * |Ax + By - c|_2^2
  *
  * considered as a function of its first and second arguments, respectively.
  */
@@ -44,6 +47,29 @@ template <typename VariableX, typename VariableY, typename VariableR,
           typename... Args>
 using AugLagMinY = std::function<VariableY(
     const VariableX &x, const VariableR &lambda, double rho, Args &... args)>;
+
+/** An alias template for a user-definable function that can be
+ * used to access various interesting bits of information about the internal
+ * state of the ADMM algorithm as it runs.  More precisely, this function is
+ * called at the end of each iteration, and is provided access to
+ * the following quantities:
+ *
+ * i: index of current iteration
+ * t: total elapsed computation time at the *end* of the current iteration
+ * x: value of the iterate x at the *end* of the current iteration
+ * y: value of the iterate y at the *end* of the current iteration
+ * lambda: value of the dual variable lambda at the *end* of the current
+ * iteration
+ * rho: value of the penalty parameter at the *end* of the current iteration
+ * r: primal residual at the *end* of the current iteration
+ * s: dual residual at the *end* of the current iteration
+ */
+template <typename VariableX, typename VariableY, typename VariableR,
+          typename... Args>
+using ADMMUserFunction =
+    std::function<void(unsigned int i, double t, const VariableX &x,
+                       const VariableY &y, const VariableR &lambda, double rho,
+                       const VariableR &r, const VariableX &s, Args &... args)>;
 
 /** A simple enumeration type describing the strategy used to adapt the penalty
  * parameter rho in the augmented Lagrangian */
@@ -81,7 +107,8 @@ struct ADMMParams : public OptimizerParams {
    * window within which the augmented Lagrangian penalty parameter will be
    * adjusted -- this is to ensure that the penalty parameter will eventually be
    * constant, so that the ADMM algorithm is guaranteed to converge */
-  unsigned int penalty_adaptation_window = 1000;
+  unsigned int penalty_adaptation_window =
+      std::numeric_limits<unsigned int>::max();
 
   /** If the 'Residual_Balance' adaptation strategy is used, this value sets the
    * threshold for the maximum admissible ratio between the primal and dual
@@ -156,8 +183,9 @@ enum class ADMMStatus {
 };
 
 /** A useful struct used to hold the output of the ADMM algorithm */
-template <typename VariableX, typename VariableY>
-struct ADMMResult : OptimizerResult<std::pair<VariableX, VariableY>> {
+template <typename VariableX, typename VariableY, typename VariableR>
+struct ADMMResult
+    : OptimizerResult<std::tuple<VariableX, VariableY, VariableR>> {
 
   /** The stopping condition that triggered algorithm termination */
   ADMMStatus status;
@@ -275,7 +303,7 @@ double spectral_penalty_parameter_update(
 
 template <typename VariableX, typename VariableY, typename VariableR,
           typename... Args>
-ADMMResult<VariableX, VariableY>
+ADMMResult<VariableX, VariableY, VariableR>
 ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
      const AugLagMinY<VariableX, VariableY, VariableR, Args...> &minLy,
      const LinearOperator<VariableX, VariableR, Args...> &A,
@@ -284,7 +312,10 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
      const InnerProduct<VariableX, Args...> inner_product_x,
      const InnerProduct<VariableR, Args...> inner_product_r, const VariableR &c,
      const VariableX &x0, const VariableY &y0, Args... args,
-     const ADMMParams &params = ADMMParams()) {
+     const ADMMParams &params = ADMMParams(),
+     const std::experimental::optional<
+         ADMMUserFunction<VariableX, VariableY, VariableR, Args...>>
+         &user_function = std::experimental::nullopt) {
 
   /// Declare some useful variables
 
@@ -332,7 +363,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   VariableR lambda_k0, lambda_hat_k0;
 
   /// Output struct
-  ADMMResult<VariableX, VariableY> result;
+  ADMMResult<VariableX, VariableY, VariableR> result;
   result.status = ADMMStatus::ITERATION_LIMIT;
 
   /// INITIALIZATION
@@ -366,7 +397,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
 
   /// ITERATE!
   auto start_time = Stopwatch::tick();
-  for (unsigned int i = 0; i < params.max_iterations; ++i) {
+  for (unsigned int iter = 0; iter < params.max_iterations; ++iter) {
 
     /// ADMM ITERATION
 
@@ -377,8 +408,8 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
 
     // Compute lambda_hat for spectral penalty parameter update, if needed
     if ((params.penalty_adaptation_mode == ADMMPenaltyAdaptation::Spectral) &&
-        ((i % params.penalty_adaptation_period) == 0) &&
-        (i < params.penalty_adaptation_window)) {
+        ((iter % params.penalty_adaptation_period) == 0) &&
+        (iter < params.penalty_adaptation_window)) {
 
       // When using spectral penalty adaptation, we compute lambda_hat *AFTER*
       // updating x but *BEFORE* updating y and lambda: this corresponds to
@@ -418,7 +449,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     if (params.verbose) {
       std::cout << "Iter: ";
       std::cout.width(iter_field_width);
-      std::cout << i << ", time: " << elapsed_time << ", primal residual: ";
+      std::cout << iter << ", time: " << elapsed_time << ", primal residual: ";
       std::cout.width(params.precision + 7);
       std::cout << primal_residual << ", dual residual:";
       std::cout.width(params.precision + 7);
@@ -434,7 +465,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     result.penalty_parameters.push_back(rho);
 
     if (params.log_iterates)
-      result.iterates.emplace_back(x, y);
+      result.iterates.emplace_back(x, y, lambda);
 
     /// TEST STOPPING CRITERIA
     // Test elapsed-time-based stopping criterion
@@ -466,8 +497,8 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     /// PENALTY PARAMETER UPDATE
 
     if ((params.penalty_adaptation_mode != ADMMPenaltyAdaptation::None) &&
-        ((i % params.penalty_adaptation_period) == 0) &&
-        (i < params.penalty_adaptation_window)) {
+        ((iter % params.penalty_adaptation_period) == 0) &&
+        (iter < params.penalty_adaptation_window)) {
 
       // Residual balancing (eq. 3.13)
       if (params.penalty_adaptation_mode ==
@@ -512,10 +543,16 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
 
     y_prev = y;
 
+    /// Call user-supplied function to provide access to internal algorithm
+    /// state, if requested
+    if (user_function)
+      (*user_function)(iter, Stopwatch::tock(start_time), x, y, lambda, rho, r,
+                       s, args...);
+
   } // ADMM ITERATIONS
 
   /// RECORD FINAL OUTPUT
-  result.x = {x, y};
+  result.x = {x, y, lambda};
   result.elapsed_time = Stopwatch::tock(start_time);
 
   /// Print final output, if requested
@@ -552,7 +589,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
  * represent each variable */
 
 template <typename Variable, typename... Args>
-ADMMResult<Variable, Variable>
+ADMMResult<Variable, Variable, Variable>
 ADMM(const AugLagMinX<Variable, Variable, Variable, Args...> &minLx,
      const AugLagMinY<Variable, Variable, Variable, Args...> &minLy,
      const LinearOperator<Variable, Variable, Args...> &A,
@@ -560,10 +597,13 @@ ADMM(const AugLagMinX<Variable, Variable, Variable, Args...> &minLx,
      const LinearOperator<Variable, Variable, Args...> &At,
      const InnerProduct<Variable, Args...> inner_product, const Variable &c,
      const Variable &x0, const Variable &y0, Args... args,
-     const ADMMParams &params = ADMMParams()) {
+     const ADMMParams &params = ADMMParams(),
+     const std::experimental::optional<
+         ADMMUserFunction<Variable, Variable, Variable, Args...>>
+         &user_function = std::experimental::nullopt) {
   return ADMM<Variable, Variable, Variable, Args...>(
       minLx, minLy, A, B, At, inner_product, inner_product, c, x0, y0, args...,
-      params);
+      params, user_function);
 }
 
 } // namespace Convex
