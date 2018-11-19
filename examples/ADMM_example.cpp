@@ -188,8 +188,8 @@ int main() {
 
   if (write_output) {
     // Define a lambda function that computes the objective of the LASSO problem
-    auto f = [&](const std::pair<VectorXd, VectorXd> &p) {
-      return .5 * (A * p.first - b).squaredNorm() + mu * p.first.lpNorm<1>();
+    auto f = [&](const VectorXd& x) {
+      return .5 * (A * x - b).squaredNorm() + mu * x.lpNorm<1>();
     };
 
     string primal_residuals_filename = "primal_residuals.txt";
@@ -216,7 +216,7 @@ int main() {
          << objective_values_filename << " ... " << endl;
     ofstream objective_values_file(objective_values_filename);
     for (const auto &p : result.iterates)
-      objective_values_file << f(p) << " ";
+      objective_values_file << f(std::get<0>(p)) << " ";
     objective_values_file.close();
 
     cout << "Writing out penalty values to file: " << penalty_values_filename

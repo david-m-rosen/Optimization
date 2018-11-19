@@ -1,6 +1,7 @@
 /** This header file provides several lightweight alias templates and template
- * classes implementing the Alternating Direction Method of Multipliers (ADMM)
- * algorithm for solving convex minimization problems of the form:
+ * classes implementing the (optionally Nestorov-accelerated) Alternating
+ * Direction Method of Multipliers (ADMM) algorithm for solving convex
+ * minimization problems of the form:
  *
  * min f(x) + g(y)
  *
@@ -9,7 +10,9 @@
  * via operator splitting.  This implementation is based upon the one described
  * in Section 3.1 of "Distributed Optimization and Statistical Learning via the
  * Alternating Direction Method of Multipliers", by S. Boyd, N. Parikh, E. Chu,
- * B. Peleato, and J. Eckstein.
+ * B. Peleato, and J. Eckstein, and Algorithm 8 of the paper "Fast Alternating
+ * Direction Optimization Methods", by T. Goldstein, B. O'Donoghue, S. Setzer,
+ * and R. Baraniuk.
  *
  * Copyright (C) 2018 by David M. Rosen (drosen2000@gmail.com)
  */
@@ -25,6 +28,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <utility>
 
 namespace Optimization {
 namespace Convex {
@@ -86,21 +90,31 @@ enum class ADMMPenaltyAdaptation {
   /** Use the spectral penalty (Barzilai-Borwein-based) selection method
      described in the paper "Adaptive ADMM with Spectral Penalty Parameter
      Selection", by Z. Xu, M.A.T. Figueiredo, and T. Goldstein.*/
-  Spectral
+  // Spectral
+};
+
+enum class ADMMMode {
+  /** Vanilla ADMM */
+  Simple,
+
+  /** Nestorov-accelerated */
+  Accelerated,
 };
 
 struct ADMMParams : public OptimizerParams {
 
-  /// Penalty parameter settings
+  /// PENALTY PARAMETER SETTINGS
 
   /** (Initial) value of penalty parameter rho */
   double rho = 1.0;
 
-  /** Adaptation strategy for penalty parameter */
+  /** Adaptation strategy for penalty parameter (currently only supported in
+   * 'simple' mode) */
   ADMMPenaltyAdaptation penalty_adaptation_mode = ADMMPenaltyAdaptation::None;
 
-  /** If penalty_adaptation_mode != None, this parameter controls how frequently
-   * (in terms of number of iterations) the penalty parameter is updated */
+  /** If penalty_adaptation_mode != None, this parameter controls how
+   * frequently (in terms of number of iterations) the penalty parameter is
+   * updated */
   unsigned int penalty_adaptation_period = 2;
 
   /** This value sets an upper limit (in terms of number of iterations) on the
@@ -125,15 +139,17 @@ struct ADMMParams : public OptimizerParams {
    * should be positive, and greater than 1. */
   double residual_balance_tau = 2;
 
-  /** If the 'Spectral' parameter adaptation strategy is used, this value
-   * controls the minimum acceptable quality of the quasi-Newton Hessian
-   * approximation (used to compute the spectral stepsize estimate) that must be
-   * obtained before the estimate is accepted (cf. eq. (29) in the paper
-   * "Adaptive ADMM with Spectral Penalty Parameter Selection", by Z. Xu, M.A.T.
-   * Figueiredo, and T. Goldstein).  Valid values of this parameter are in the
-   * range (0,1) (with 1 being more stringent).
-   */
-  double spectral_penalty_minimum_correlation = .2;
+  /// NESTEROV ACCELERATION
+
+  /** ADMM mode: Simple (vanilla) or Nestorov-accelerated */
+  ADMMMode mode = ADMMMode::Simple;
+
+  /** Threshold on the fractional decrease in the merit function ck defined in
+  eq. (30) of "Fast Alternating Direction Optimization Methods" that must be
+  obtained in order to accept an accelerated iteration.  This value should be in
+  the range (0, 1), and is best taken close to 1 (to provide a permissive
+  acceptance criterion for acceleration) */
+  double eta = .999;
 
   /** Termination criteria:
    *
@@ -167,7 +183,7 @@ struct ADMMParams : public OptimizerParams {
   double eps_rel = 1e-3;
 };
 
-/** Enum type that describes the termination status of the algorithm */
+/** Enum class that describes the termination status of the algorithm */
 enum class ADMMStatus {
   /** ADMM algorithm terminated because the residual stopping criteria were
      satisfied */
@@ -180,6 +196,20 @@ enum class ADMMStatus {
   /** ADMM algorithm terminated because it exceeded the alloted computation time
      before achieving the desired residual tolerances */
   ELAPSED_TIME
+};
+
+/** Enum class that describes the type of each iteration of the ADMM algorithm
+ */
+enum class ADMMIterationType {
+  /** The iteration produced a (nontrivially) Nestorov-accelerated step */
+  Accelerated,
+
+  /** The iteration produced a standard (unaccelerated) ADMM step */
+  Standard,
+
+  /** The iteration was a restart iteration (only occurs when using accelerated
+     ADMM) */
+  Restart
 };
 
 /** A useful struct used to hold the output of the ADMM algorithm */
@@ -196,9 +226,13 @@ struct ADMMResult
   /** Dual residual at the end of each iteration */
   std::vector<double> dual_residuals;
 
-  /** The sequence of augmented Lagrangian penalty parameters employed by the
-   * algorithm at each iteration.*/
+  /** The sequence of augmented Lagrangian penalty parameters employed by
+   * the algorithm at each iteration.*/
   std::vector<double> penalty_parameters;
+
+  /** A vector containing the classification of each iteration performed by the
+   * ADMM algorithm */
+  std::vector<ADMMIterationType> iteration_types;
 };
 
 /** Helper function:  This function implements the residual-balancing updating
@@ -213,90 +247,6 @@ double residual_balance_penalty_parameter_update(double primal_residual,
     return tau * rho;
   else if (dual_residual > mu * primal_residual)
     return rho / tau;
-  else
-    return rho;
-}
-
-/** Helper function:  This function implements the augmented Lagrangian penalty
- * parameter update rule described in the paper "Adaptive ADMM with Spectral
- * Penalty Parameter Selection", by Z. Xu, M.A.T. Figueiredo, and T. Goldstein
- */
-
-template <typename VariableR, typename... Args>
-double spectral_penalty_parameter_update(
-    const VariableR &delta_lambda_hat, const VariableR &delta_lambda,
-    const VariableR &delta_H_hat, const VariableR &delta_G_hat,
-    const InnerProduct<VariableR, Args...> &inner_product, double eps_cor,
-    double rho, Args... args) {
-
-  /// Some convenient aliases to make this easier on the eyes :-P
-  const VariableR &dlh = delta_lambda_hat;
-  const VariableR &dl = delta_lambda;
-  const VariableR &dH = delta_H_hat;
-  const VariableR &dG = delta_G_hat;
-
-  /// First, compute steepest descent and minimum-gradient stepsizes
-
-  // Compute and cache a bunch of pair-wise inner products for alphas
-  double dlh_dlh = inner_product(dlh, dlh, args...);
-  double dH_dlh = inner_product(dH, dlh, args...);
-  double dH_dH = inner_product(dH, dH, args...);
-
-  // Compute and cache a bunch of pair-wise inner products for betas
-  double dl_dl = inner_product(dl, dl, args...);
-  double dG_dl = inner_product(dG, dl, args...);
-  double dG_dG = inner_product(dG, dG, args...);
-
-  // Compute stepsizes using equation (26) -- (28) from the paper
-
-  /// alphas
-
-  // alpha_SD = <dlambda_hat, dlambda_hat> / <dH, dlambda_hat> (eq. 26)
-  double alpha_SD = dlh_dlh / dH_dlh;
-
-  // alpha_MG = <dH, dlambda_hat> / <dH, dH> (eq. 26)
-  double alpha_MG = dH_dlh / dH_dH;
-
-  /// betas
-
-  // beta_SD = <dlambda, dlambda> / <dG, dlambda>
-  double beta_SD = dl_dl / dG_dl;
-
-  // beta_MG = <dG, dlambda> / <dG, dG>
-  double beta_MG = dG_dl / dG_dG;
-
-  /// Compute hybrid stepsizes following the recommendation of the paper
-  /// "Gradient Methods with Adaptive Step-Sizes", by B. Zhou, L. Gao, and
-  /// Y.-H. Dai
-
-  // Equation (27) from "Adaptive ADMM ..."
-
-  double alpha =
-      ((2 * alpha_MG) > alpha_SD ? alpha_MG : alpha_SD - .5 * alpha_MG);
-
-  double beta = ((2 * beta_MG) > beta_SD ? beta_MG : beta_SD - .5 * beta_MG);
-
-  // Compute "correlations" (eq. 29)
-
-  double dlh_norm = sqrt(dlh_dlh);
-  double dl_norm = sqrt(dl_dl);
-  double dH_norm = sqrt(dH_dH);
-  double dG_norm = sqrt(dG_dG);
-
-  // alpha_cor = <dH, dlambda_hat> / (|dH| * |dlambda_hat|)
-  double alpha_cor = dH_dlh / (dH_norm * dlh_norm);
-
-  // beta_cor = <dG, dlambda> / (|dG| * |dlambda|)
-  double beta_cor = dG_dl / (dG_norm * dl_norm);
-
-  // Implement safeguarding strategy (eq. (30)) and return
-
-  if ((alpha_cor > eps_cor) && (beta_cor > eps_cor))
-    return sqrt(alpha * beta);
-  else if ((alpha_cor > eps_cor) && (beta_cor <= eps_cor))
-    return alpha;
-  else if ((alpha_cor <= eps_cor) && (beta_cor > eps_cor))
-    return beta;
   else
     return rho;
 }
@@ -319,71 +269,77 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
 
   /// Declare some useful variables
 
-  /// Iterates required by main ADMM loop
+  /// Iterates required by main (simple) ADMM loop
 
   // Current iterates
   VariableX x;
-
   VariableY y;
-
   VariableR lambda;
-
-  // Previous iterate of y (needed for the dual residual computation)
-  VariableY y_prev;
 
   // Current value of augmented Lagrangian penalty parameter
   double rho;
 
-  // Primal residual vector
+  // Cache variables for intermediate products Ax, By
+  VariableR Ax, By;
+
+  // Primal dual residual vector
   VariableR r;
 
   // Dual residual vector
   VariableX s;
 
-  // Primal and dual residuals
-  double primal_residual, dual_residual;
-
-  // Cache variables for intermediate products Ax, By
-  VariableR Ax, By;
+  // Previous iterate of y (needed for the dual residual computation)
+  VariableY y_prev;
 
   double c_norm = sqrt(inner_product_r(c, c, args...));
 
-  /// Extra variables required for the spectral penalty parameter estimation
-  /// procedure
+  ADMMIterationType iteration_type;
 
-  // An auxiliary variable required for the spectral penalty parameter update,
-  // cf. Section 2.3 of the paper "Adaptive ADMM with Spectral Penalty Parameter
-  // Selection", by Z. Xu, M.A.T. Figueiredo, and T. Goldstein
-  VariableR lambda_hat;
+  // Primal and dual residual values
+  double primal_residual, dual_residual;
 
-  // Cached values of the variables x, y, lambda, and lambda_hat from the last
-  // iteration k0 at which the penalty parameter was updated
-  VariableX x_k0;
-  VariableY y_k0;
-  VariableR lambda_k0, lambda_hat_k0;
+  /// Additional variables needed for accelerated ADMM (only used if ADMMMode ==
+  /// Accelerated)
+
+  VariableY y_hat;       // Forward-predicted y-variable value
+  VariableR lambda_hat;  // Forward-predicted dual variable value
+  VariableR lambda_prev; // Previous value of dual variable
+
+  // Merit function used to test for acceptance of accelerated ADMM
+  // steps, as described in eq. (30) of the paper "Fast Alternating Direction
+  // Optimization Methods" by T. Goldstein, B. O'Donoghue, S.Setzer, and
+  // R.Baraniuk
+  double c_k, c_kminus1;
+
+  // Acceleration forward-prediction weighting sequence
+  double alpha_k, alpha_kplus1;
 
   /// Output struct
   ADMMResult<VariableX, VariableY, VariableR> result;
   result.status = ADMMStatus::ITERATION_LIMIT;
 
   /// INITIALIZATION
+  rho = params.rho;
   x = x0;
   y = y0;
-  y_prev = y0;
   Ax = A(x, args...);
   By = B(y, args...);
-  rho = params.rho;
-
-  // Compute initial value of dual variable lambda
   lambda = rho * (Ax + By - c);
+  y_prev = y0;
 
-  if (params.penalty_adaptation_mode == ADMMPenaltyAdaptation::Spectral) {
-    /// Additional initializations for spectral penalty adaptation procedure
-    x_k0 = x;
-    y_k0 = y;
-    lambda_k0 = lambda;
-    lambda_hat_k0 = lambda;
-  } // spectral update initialization
+  iteration_type =
+      (params.mode == ADMMMode::Accelerated ? ADMMIterationType::Restart
+                                            : ADMMIterationType::Standard);
+
+  // Additional initializations for accelerated ADMM
+  if (params.mode == ADMMMode::Accelerated) {
+    y_hat = y;
+    lambda_hat = lambda;
+    lambda_prev = lambda;
+    c_kminus1 = std::numeric_limits<double>::max();
+
+    alpha_k = 1.0;
+  }
 
   if (params.verbose) {
     std::cout << std::scientific;
@@ -403,43 +359,105 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
 
     /// UPDATE X
     // Update x by minimizing augmented Lagrangian with respect to x (eq. 3.2)
-    x = minLx(y, lambda, rho, args...);
-    Ax = A(x, args...);
-
-    // Compute lambda_hat for spectral penalty parameter update, if needed
-    if ((params.penalty_adaptation_mode == ADMMPenaltyAdaptation::Spectral) &&
-        ((iter % params.penalty_adaptation_period) == 0) &&
-        (iter < params.penalty_adaptation_window)) {
-
-      // When using spectral penalty adaptation, we compute lambda_hat *AFTER*
-      // updating x but *BEFORE* updating y and lambda: this corresponds to
-      // using the y and lambda values computed during the *PREVIOUS* iteration
-      // (cf. the definition of lambda_hat given in Sec. 2.3 of the paper
-      // "Adaptive ADMM with Spectral Penalty Parameter Selection", by Z. Xu,
-      // M.A.T. Figueiredo, and T. Goldstein)
-      lambda_hat = lambda + rho * (Ax + By - c);
-    }
+    x = minLx((params.mode == ADMMMode::Accelerated ? y_hat : y),
+              (params.mode == ADMMMode::Accelerated ? lambda_hat : lambda), rho,
+              args...);
 
     /// UPDATE Y
     // Update y by minimizing augmented Lagrangian with respect to y (eq. 3.3)
-    y = minLy(x, lambda, rho, args...);
-    By = B(y, args...);
+    y = minLy(x, (params.mode == ADMMMode::Accelerated ? lambda_hat : lambda),
+              rho, args...);
 
-    /// UPDATE PRIMAL RESIDUAL
-    // Compute primal residual vector r (Sec. 3.3)
+    /// COMPUTE PRIMAL RESIDUAL VECTOR
+    // Compute primal residual vector (cf. Sec. 3.3 of "Distributed Optimization
+    // and Statistical Learning via the Alternating Direction Method of
+    // Multipliers")
+    Ax = A(x, args...);
+    By = B(y, args...);
     r = Ax + By - c;
+    primal_residual = sqrt(inner_product_r(r, r, args...));
 
     /// UPDATE LAMBDA
     // Update dual variable lambda (eq. 3.4), w/ r = Ax + By -c
-    lambda = lambda + rho * r;
+    lambda =
+        (params.mode == ADMMMode::Accelerated ? lambda_hat : lambda) + rho * r;
 
-    /// UPDATE DUAL RESIDUAL
-    // Compute dual residual vector s (Sec. 3.3)
-    s = rho * At(B(y - y_prev, args...), args...);
+    /// ACCELERATED ADMM UPDATE
+    // Compute the Nestorov-accelerated forward-prediction step described in
+    // Algorithm 8 of "Fast Alternating Direction Optimization Methods", by T.
+    // Goldstein, B. O'Donoghue, S. Setzer, and R. Baraniuk
+    if (params.mode == ADMMMode::Accelerated) {
 
-    // Compute primal and dual residual norms
-    primal_residual = sqrt(inner_product_r(r, r, args...));
-    dual_residual = sqrt(inner_product_x(s, s, args...));
+      // Compute the quality measure c_k shown on line 5 of Algorithm 8 in the
+      // paper "Fast Alternating Direction Optimization Methods
+      const VariableR Bdiff = B(y - y_hat, args...);
+
+      // Here we use the fact that
+      //
+      // lambda - lambda_hat = rho * (Ax + By - c) = rho*r,
+      //
+      // and therefore:
+      //
+      // rho^-1 * |lambda - lambda_hat|^2 = rho^-1 * |rho*r|^2
+      //                                  = rho * |r|^2
+      //
+      // to simplify the following computation
+      c_k = rho * inner_product_r(r, r, args...) +
+            rho * inner_product_r(Bdiff, Bdiff, args...);
+
+      /// Test acceptance of the current iteration
+      if (c_k < params.eta * c_kminus1) {
+        alpha_kplus1 = (1 + sqrt(1 + 4 * alpha_k * alpha_k)) / 2;
+
+        // Forward-predict variable y
+        y_hat = y + ((alpha_k - 1) / alpha_kplus1) * (y - y_prev);
+
+        // Forward-predict variable lambda
+        lambda_hat =
+            lambda + ((alpha_k - 1) / alpha_kplus1) * (lambda - lambda_prev);
+
+        // If the *previous* iteration was a restart iteration ...
+        if (iteration_type == ADMMIterationType::Restart) {
+          // ... then alpha_k == 1.0, so this iteration is a Standard ADMM step
+          iteration_type = ADMMIterationType::Standard;
+        } else {
+          // If the *previous* iteration was NOT a restart iteration, then it
+          // was either a standard or accelerated ADMM step, in which case
+          // *this* step will have (nontrivial) Nestorov acceleration
+          iteration_type = ADMMIterationType::Accelerated;
+        } // if (iteration type)
+
+      } else {
+        // Reject step and restart
+
+        alpha_kplus1 = 1.0;
+        y_hat = y_prev;
+        lambda_hat = lambda;
+        c_k = c_kminus1 / params.eta;
+
+        iteration_type = ADMMIterationType::Restart;
+      } // test acceptance of step
+
+    } // Accelerated ADMM update
+
+    /// COMPUTE DUAL RESIDUAL VECTOR
+
+    // Compute dual residual (cf. Sec. 3.3 of "Distributed Optimization and
+    // Statistical Learning via the Alternating Direction Method of
+    // Multipliers").  Note that here we use the modified dual residual shown
+    // in eq. (29) of "Fast Alternating Direction Optimization Methods" for
+    // the case in which params.mode == Accelerated).
+
+    if (iteration_type != ADMMIterationType::Restart) {
+      s = rho *
+          At(B(y - (iteration_type == ADMMIterationType::Accelerated ? y_hat
+                                                                     : y_prev),
+               args...),
+             args...);
+      dual_residual = sqrt(inner_product_x(s, s, args...));
+    }
+
+    /// End of ADMM step computations
 
     // Record the elapsed time at the END of this iteration
     double elapsed_time = Stopwatch::tock(start_time);
@@ -449,23 +467,41 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     if (params.verbose) {
       std::cout << "Iter: ";
       std::cout.width(iter_field_width);
-      std::cout << iter << ", time: " << elapsed_time << ", primal residual: ";
+      std::cout << iter << ", time: " << elapsed_time;
+      std::cout << ", primal residual: ";
       std::cout.width(params.precision + 7);
       std::cout << primal_residual << ", dual residual:";
       std::cout.width(params.precision + 7);
       std::cout << dual_residual << ", penalty:";
       std::cout.width(params.precision + 7);
-      std::cout << rho << std::endl;
-    }
+      std::cout << rho;
 
-    /// Record output
+      // Print out iteration type
+      switch (iteration_type) {
+      case ADMMIterationType::Accelerated:
+        std::cout << " (accelerated)";
+        break;
+      case ADMMIterationType::Standard:
+        std::cout << " (standard)";
+        break;
+      case ADMMIterationType::Restart:
+        std::cout << " (restart)";
+        break;
+      }
+      std::cout << std::endl;
+    } // if (params.verbose)
+
+    /// RECORD ITERATION RESULTS
     result.time.push_back(elapsed_time);
     result.primal_residuals.push_back(primal_residual);
     result.dual_residuals.push_back(dual_residual);
     result.penalty_parameters.push_back(rho);
+    result.iteration_types.push_back(iteration_type);
 
     if (params.log_iterates)
-      result.iterates.emplace_back(x, y, lambda);
+      result.iterates.emplace_back(
+          x, (params.mode == ADMMMode::Accelerated ? y_hat : y),
+          (params.mode == ADMMMode::Accelerated ? lambda_hat : lambda));
 
     /// TEST STOPPING CRITERIA
     // Test elapsed-time-based stopping criterion
@@ -474,15 +510,14 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
       break;
     }
 
-    /// Compute primal and dual stopping tolerances (Sec. 3.3.1)
-    // Primal stopping tolerance
+    /// Compute primal stopping tolerance (Sec. 3.3.1)
     double Ax_norm = sqrt(inner_product_r(Ax, Ax, args...));
     double By_norm = sqrt(inner_product_r(By, By, args...));
     double eps_primal =
         params.eps_abs_pri +
         params.eps_rel * std::max<double>({Ax_norm, By_norm, c_norm});
 
-    // Dual stopping tolerance
+    /// Compute dual stopping tolerance (Sec. 3.3.1)
     const VariableX At_lambda = At(lambda, args...);
     double At_lambda_norm =
         sqrt(inner_product_x(At_lambda, At_lambda, args...));
@@ -495,64 +530,51 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     }
 
     /// PENALTY PARAMETER UPDATE
-
-    if ((params.penalty_adaptation_mode != ADMMPenaltyAdaptation::None) &&
+    if ((params.penalty_adaptation_mode ==
+         ADMMPenaltyAdaptation::Residual_Balance) &&
         ((iter % params.penalty_adaptation_period) == 0) &&
         (iter < params.penalty_adaptation_window)) {
 
       // Residual balancing (eq. 3.13)
-      if (params.penalty_adaptation_mode ==
-          ADMMPenaltyAdaptation::Residual_Balance) {
-        rho = residual_balance_penalty_parameter_update(
-            primal_residual, dual_residual, params.residual_balance_mu,
-            params.residual_balance_tau, rho);
+      rho = residual_balance_penalty_parameter_update(
+          primal_residual, dual_residual, params.residual_balance_mu,
+          params.residual_balance_tau, rho);
+
+      if (params.mode == ADMMMode::Accelerated) {
+        // Restart acceleration
+        alpha_kplus1 = 1.0;
+        y_hat = y_prev;
+        lambda_hat = lambda;
+        c_k = std::numeric_limits<double>::max();
+
+        iteration_type = ADMMIterationType::Restart;
       }
 
-      /// Spectral parameter update
-      if (params.penalty_adaptation_mode == ADMMPenaltyAdaptation::Spectral) {
-
-        /// Compute finite-difference variables, following the definitions given
-        /// in Sec. 3.2 of the paper "Adaptive ADMM with Spectral Penalty
-        /// Parameter Selection"
-        VariableR delta_lambda = lambda - lambda_k0;
-        VariableR delta_lambda_hat = lambda_hat - lambda_hat_k0;
-
-        // NB:  The augmented Lagrangian used in "Adaptive ADMM with Spectral
-        // Penalty Parameter Selection" negates the signs of the residuals
-        // used in their version of the augmented Lagrangian relative to ours;
-        // therefore, we must use a negative sign in front of our linear
-        // operators
-        VariableR delta_H_hat = A(x_k0 - x, args...);
-        VariableR delta_G_hat = B(y_k0 - y, args...);
-
-        // Update rho
-        rho = spectral_penalty_parameter_update<VariableR, Args...>(
-            delta_lambda_hat, delta_lambda, delta_H_hat, delta_G_hat,
-            inner_product_r, params.spectral_penalty_minimum_correlation, rho,
-            args...);
-
-        /// Cache these values
-        x_k0 = x;
-        y_k0 = y;
-        lambda_k0 = lambda;
-        lambda_hat_k0 = lambda_hat;
-      } // spectral penalty parameter update
-    }   // penalty parameter update
+    } // penalty parameter update
 
     /// CACHE PARAMETERS AND PREPARE FOR NEXT ITERATION
-
     y_prev = y;
+
+    if (params.mode == ADMMMode::Accelerated) {
+      lambda_prev = lambda;
+      alpha_k = alpha_kplus1;
+      c_kminus1 = c_k;
+    }
 
     /// Call user-supplied function to provide access to internal algorithm
     /// state, if requested
     if (user_function)
-      (*user_function)(iter, Stopwatch::tock(start_time), x, y, lambda, rho, r,
-                       s, args...);
+      (*user_function)(
+          iter, Stopwatch::tock(start_time), x,
+          (params.mode == ADMMMode::Accelerated ? y_hat : y),
+          (params.mode == ADMMMode::Accelerated ? lambda_hat : lambda), rho, r,
+          s, args...);
 
   } // ADMM ITERATIONS
 
   /// RECORD FINAL OUTPUT
-  result.x = {x, y, lambda};
+  result.x = {x, (params.mode == ADMMMode::Accelerated ? y_hat : y),
+              (params.mode == ADMMMode::Accelerated ? lambda_hat : lambda)};
   result.elapsed_time = Stopwatch::tock(start_time);
 
   /// Print final output, if requested
@@ -582,7 +604,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   } // if(verbose)
 
   return result;
-}
+} // namespace Convex
 
 /** This next function provides a convenient specialization of the ADMM
  * interface for the (common) use case in which a single data type is used to
