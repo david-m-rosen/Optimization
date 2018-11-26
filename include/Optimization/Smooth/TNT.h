@@ -259,7 +259,7 @@ satisfy 0 < eta1 <= eta2) */
 };
 
 /** A set of status flags indicating the stopping criterion that triggered
-* algorithm termination */
+ * algorithm termination */
 enum class TNTStatus {
 
   /** The algorithm obtained a solution satisfying the gradient tolerance */
@@ -284,7 +284,7 @@ enum class TNTStatus {
   TRUST_REGION,
 
   /** The algorithm exhausted the allotted number of major (outer) iterations
-     */
+   */
   ITERATION_LIMIT,
 
   /** The algorithm exhausted the allotted computation time */
@@ -332,9 +332,10 @@ TNT(const Objective<Variable, Args...> &f,
     const QuadraticModel<Variable, Tangent, Args...> &QM,
     const RiemannianMetric<Variable, Tangent, Args...> &metric,
     const Retraction<Variable, Tangent, Args...> &retract, const Variable &x0,
-    Args &... args, const std::experimental::optional<
-                        LinearOperator<Variable, Tangent, Args...>> &precon =
-                        std::experimental::nullopt,
+    Args &... args,
+    const std::experimental::optional<
+        LinearOperator<Variable, Tangent, Args...>> &precon =
+        std::experimental::nullopt,
     const TNTParams &params = TNTParams(),
     const std::experimental::optional<
         TNTUserFunction<Variable, Tangent, Args...>> &user_function =
@@ -535,7 +536,7 @@ TNT(const Objective<Variable, Args...> &f,
     /// Update cached values if the iterate is accepted
     if (step_accepted) {
       // Accept iterate and cache values ...
-      x = x_proposed;
+      x = std::move(x_proposed);
       f_x = f_x_proposed;
 
       // Test relative decrease-based stopping criterion
@@ -561,8 +562,7 @@ TNT(const Objective<Variable, Args...> &f,
             x, preconditioned_gradient, preconditioned_gradient, args...));
       } else {
         // We use the identity preconditioner, so the norms of the gradient
-        // and
-        // preconditioned gradient are identical
+        // and preconditioned gradient are identical
         preconditioned_grad_f_x_norm = grad_f_x_norm;
       }
 
@@ -674,5 +674,5 @@ TNTResult<Vector> EuclideanTNT(
                                       args..., precon, params, user_function);
 }
 
-} // Smooth
-} // Optimization
+} // namespace Smooth
+} // namespace Optimization
