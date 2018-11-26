@@ -35,8 +35,8 @@ int main() {
 
   /// SETUP
 
-  unsigned int m = 150;   // Dimensionality of observations
-  unsigned int n = 500;   // Dimensionality of latent vector x
+  unsigned int m = 1500;  // Dimensionality of observations
+  unsigned int n = 5000;  // Dimensionality of latent vector x
   unsigned int nnz = 100; // Number of nonzero elements of x
   double sigma = .1; // Standard deviation of additive noise on measurements
   double mu;         // Regularization parameter for Lasso
@@ -93,17 +93,18 @@ int main() {
 
   // ADMM params
   ADMMParams params;
-  params.max_iterations = 100;
+  params.max_iterations = 250;
   params.verbose = true; // Turn on verbose output
   params.log_iterates = true;
-  params.penalty_adaptation_mode = ADMMPenaltyAdaptation::Residual_Balance;
+  params.mode = ADMMMode::Simple;
+  params.penalty_adaptation_mode = ADMMPenaltyAdaptation::None;
   params.penalty_adaptation_period = 1;
 
   // Set the stopping criteria for this example to match those used in
   // the reference paper
-  params.eps_rel = 1e-2;
-  params.eps_abs_pri = sqrt(n) * 1e-3;
-  params.eps_abs_dual = sqrt(n) * 1e-3;
+  params.eps_rel = 1e-4;
+  params.eps_abs_pri = 1e-2;
+  params.eps_abs_dual = 1e-2;
 
   /// Minimization over x:
   ///
@@ -186,9 +187,34 @@ int main() {
 
   /// PROCESS OUTPUT
 
+  /// Compute minimum-norm subgradient of final solution
+  VectorXd &xopt = std::get<0>(result.x);
+
+  // First, compute gradient of smooth part
+  VectorXd subgrad = A.transpose() * (A * xopt - b);
+
+  for (unsigned int i = 0; i < subgrad.rows(); ++i) {
+    if (fabs(xopt(i)) < 1e-4) {
+      // If xopt_i ~ 0, pick a value from the range [-mu, mu] that will
+      // minimize the absolute value of the resulting element in the subgradient
+      if (fabs(subgrad(i)) < mu)
+        subgrad(i) = 0;
+      else
+        subgrad(i) -= copysign(mu, subgrad(i));
+    } else {
+      // If xopt =/= 0, then the subgradient is simply sign(x) mu
+      subgrad(i) += copysign(mu, xopt(i));
+    }
+  }
+
+  double subgradient_norm = subgrad.norm();
+  cout << "Norm of subgradient at solution: " << subgradient_norm << endl
+       << endl;
+
   if (write_output) {
-    // Define a lambda function that computes the objective of the LASSO problem
-    auto f = [&](const VectorXd& x) {
+    // Define a lambda function that computes the objective of the LASSO
+    // problem
+    auto f = [&](const VectorXd &x) {
       return .5 * (A * x - b).squaredNorm() + mu * x.lpNorm<1>();
     };
 

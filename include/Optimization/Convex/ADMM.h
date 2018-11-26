@@ -36,8 +36,8 @@ namespace Convex {
 /** Alias templates for functions that return the minimizers of the augmented
  * Lagrangian:
  *
- * L_rho(x, y, lambda) := f(x) + g(y) + lambda' * (Ax + By - c)
- *                          + (rho / 2) * |Ax + By - c|_2^2
+ * L_rho(x, y, lambda) := f(x) + g(y) + (rho / 2) * | Ax + By - c + (1/rho) *
+ *                                                               lambda |_2^2
  *
  * considered as a function of its first and second arguments, respectively.
  */
@@ -226,6 +226,15 @@ struct ADMMResult
   /** Dual residual at the end of each iteration */
   std::vector<double> dual_residuals;
 
+  /** Value of the monotonically-nonincreasing convergence parameter
+   *
+   * m_k := rho * |B(y- y_{k-1})|^2 + rho * |r_k|^2
+   *
+   * defined in the paper "On Non-Ergodic Convergence Rate of Douglas-Rachford
+   * Alternating Direction Method of Multipliers", by B.S. He and X. Yuan (cf.
+   * eq. (3.6) and Theorem 5.1) at the end of each iteration */
+  std::vector<double> m_k;
+
   /** The sequence of augmented Lagrangian penalty parameters employed by
    * the algorithm at each iteration.*/
   std::vector<double> penalty_parameters;
@@ -282,7 +291,11 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   // Cache variables for intermediate products Ax, By
   VariableR Ax, By;
 
-  // Primal dual residual vector
+  // Cache variable for product of B with previous iterate y_prev; used in the
+  // computation of the monotonically non-increasing convergence measure m_k
+  VariableR By_prev;
+
+  // Primal residual vector
   VariableR r;
 
   // Dual residual vector
@@ -298,18 +311,20 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   // Primal and dual residual values
   double primal_residual, dual_residual;
 
-  /// Additional variables needed for accelerated ADMM (only used if ADMMMode ==
-  /// Accelerated)
+  // Monotonically non-increasing convergence measure defined in the paper "On
+  // Non-Ergodic Convergence Rate of Douglas-Rachford Alternating Direction
+  // Method of Multipliers", by B.S. He and X. Yuan (cf. eq. (3.6) and
+  // Theorem 5.1).
+  //
+  //  m_k := rho * |B(y_k - y_{k-1})|^2 + rho * |r_k|^2
+  double m_k, m_kminus1;
+
+  /// Additional variables needed for accelerated ADMM (only used if
+  /// ADMMMode == Accelerated)
 
   VariableY y_hat;       // Forward-predicted y-variable value
   VariableR lambda_hat;  // Forward-predicted dual variable value
   VariableR lambda_prev; // Previous value of dual variable
-
-  // Merit function used to test for acceptance of accelerated ADMM
-  // steps, as described in eq. (30) of the paper "Fast Alternating Direction
-  // Optimization Methods" by T. Goldstein, B. O'Donoghue, S.Setzer, and
-  // R.Baraniuk
-  double c_k, c_kminus1;
 
   // Acceleration forward-prediction weighting sequence
   double alpha_k, alpha_kplus1;
@@ -326,6 +341,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   By = B(y, args...);
   lambda = rho * (Ax + By - c);
   y_prev = y0;
+  By_prev = B(y_prev);
 
   iteration_type =
       (params.mode == ADMMMode::Accelerated ? ADMMIterationType::Restart
@@ -336,7 +352,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     y_hat = y;
     lambda_hat = lambda;
     lambda_prev = lambda;
-    c_kminus1 = std::numeric_limits<double>::max();
+    m_kminus1 = std::numeric_limits<double>::max();
 
     alpha_k = 1.0;
   }
@@ -374,6 +390,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     // Multipliers")
     Ax = A(x, args...);
     By = B(y, args...);
+
     r = Ax + By - c;
     primal_residual = sqrt(inner_product_r(r, r, args...));
 
@@ -382,31 +399,22 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     lambda =
         (params.mode == ADMMMode::Accelerated ? lambda_hat : lambda) + rho * r;
 
+    /// COMPUTE MONOTONIC CONVERGENCE MEASURE mk:
+    VariableR By_diff =
+        By -
+        (params.mode == ADMMMode::Accelerated ? B(y_hat, args...) : By_prev);
+
+    m_k = rho * inner_product_r(r, r, args...) +
+          rho * inner_product_r(By_diff, By_diff, args...);
+
     /// ACCELERATED ADMM UPDATE
     // Compute the Nestorov-accelerated forward-prediction step described in
     // Algorithm 8 of "Fast Alternating Direction Optimization Methods", by T.
     // Goldstein, B. O'Donoghue, S. Setzer, and R. Baraniuk
     if (params.mode == ADMMMode::Accelerated) {
 
-      // Compute the quality measure c_k shown on line 5 of Algorithm 8 in the
-      // paper "Fast Alternating Direction Optimization Methods
-      const VariableR Bdiff = B(y - y_hat, args...);
-
-      // Here we use the fact that
-      //
-      // lambda - lambda_hat = rho * (Ax + By - c) = rho*r,
-      //
-      // and therefore:
-      //
-      // rho^-1 * |lambda - lambda_hat|^2 = rho^-1 * |rho*r|^2
-      //                                  = rho * |r|^2
-      //
-      // to simplify the following computation
-      c_k = rho * inner_product_r(r, r, args...) +
-            rho * inner_product_r(Bdiff, Bdiff, args...);
-
       /// Test acceptance of the current iteration
-      if (c_k < params.eta * c_kminus1) {
+      if (m_k < params.eta * m_kminus1) {
         alpha_kplus1 = (1 + sqrt(1 + 4 * alpha_k * alpha_k)) / 2;
 
         // Forward-predict variable y
@@ -433,7 +441,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
         alpha_kplus1 = 1.0;
         y_hat = y_prev;
         lambda_hat = lambda;
-        c_k = c_kminus1 / params.eta;
+        m_k = m_kminus1 / params.eta;
 
         iteration_type = ADMMIterationType::Restart;
       } // test acceptance of step
@@ -449,11 +457,11 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     // the case in which params.mode == Accelerated).
 
     if (iteration_type != ADMMIterationType::Restart) {
-      s = rho *
-          At(B(y - (iteration_type == ADMMIterationType::Accelerated ? y_hat
-                                                                     : y_prev),
-               args...),
-             args...);
+      s = rho * At(By - (iteration_type == ADMMIterationType::Accelerated
+                             ? B(y_hat, args...)
+                             : By_prev),
+
+                   args...);
       dual_residual = sqrt(inner_product_x(s, s, args...));
     }
 
@@ -472,7 +480,9 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
       std::cout.width(params.precision + 7);
       std::cout << primal_residual << ", dual residual:";
       std::cout.width(params.precision + 7);
-      std::cout << dual_residual << ", penalty:";
+      std::cout << dual_residual << ", m: ";
+      std::cout.width(params.precision + 7);
+      std::cout << m_k << ", penalty:";
       std::cout.width(params.precision + 7);
       std::cout << rho;
 
@@ -495,6 +505,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     result.time.push_back(elapsed_time);
     result.primal_residuals.push_back(primal_residual);
     result.dual_residuals.push_back(dual_residual);
+    result.m_k.push_back(m_k);
     result.penalty_parameters.push_back(rho);
     result.iteration_types.push_back(iteration_type);
 
@@ -545,7 +556,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
         alpha_kplus1 = 1.0;
         y_hat = y_prev;
         lambda_hat = lambda;
-        c_k = std::numeric_limits<double>::max();
+        m_k = std::numeric_limits<double>::max();
 
         iteration_type = ADMMIterationType::Restart;
       }
@@ -554,11 +565,12 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
 
     /// CACHE PARAMETERS AND PREPARE FOR NEXT ITERATION
     y_prev = y;
+    By_prev = By;
 
     if (params.mode == ADMMMode::Accelerated) {
       lambda_prev = lambda;
       alpha_k = alpha_kplus1;
-      c_kminus1 = c_k;
+      m_kminus1 = m_k;
     }
 
     /// Call user-supplied function to provide access to internal algorithm
