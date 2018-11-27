@@ -441,7 +441,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
         alpha_kplus1 = 1.0;
         y_hat = y_prev;
         lambda_hat = lambda;
-        m_k = m_kminus1 / params.eta;
+        m_k = m_kminus1;
 
         iteration_type = ADMMIterationType::Restart;
       } // test acceptance of step
@@ -552,11 +552,11 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
           params.residual_balance_tau, rho);
 
       if (params.mode == ADMMMode::Accelerated) {
-        // Restart acceleration
+        // Changing the penalty parameter completely invalidates the previous
+        // convergence measure, so treat this as a restart iteration
         alpha_kplus1 = 1.0;
         y_hat = y_prev;
         lambda_hat = lambda;
-        m_k = std::numeric_limits<double>::max();
 
         iteration_type = ADMMIterationType::Restart;
       }
@@ -570,7 +570,9 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     if (params.mode == ADMMMode::Accelerated) {
       lambda_prev = lambda;
       alpha_k = alpha_kplus1;
-      m_kminus1 = m_k;
+      m_kminus1 = (iteration_type == ADMMIterationType::Restart
+                       ? std::numeric_limits<double>::max()
+                       : m_k);
     }
 
     /// Call user-supplied function to provide access to internal algorithm
