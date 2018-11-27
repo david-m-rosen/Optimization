@@ -226,9 +226,10 @@ struct ADMMResult
   /** Dual residual at the end of each iteration */
   std::vector<double> dual_residuals;
 
-  /** Value of the monotonically-nonincreasing convergence parameter
+  /** Value of (the square root of) the monotonically-nonincreasing
+   * convergence parameter
    *
-   * m_k := rho * |B(y- y_{k-1})|^2 + rho * |r_k|^2
+   * m_k := sqrt( rho * |B(y- y_{k-1})|^2 + rho * |r_k|^2 )
    *
    * defined in the paper "On Non-Ergodic Convergence Rate of Douglas-Rachford
    * Alternating Direction Method of Multipliers", by B.S. He and X. Yuan (cf.
@@ -316,7 +317,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   // Method of Multipliers", by B.S. He and X. Yuan (cf. eq. (3.6) and
   // Theorem 5.1).
   //
-  //  m_k := rho * |B(y_k - y_{k-1})|^2 + rho * |r_k|^2
+  //  m_k := sqrt( rho * |B(y_k - y_{k-1})|^2 + rho * |r_k|^2 )
   double m_k, m_kminus1;
 
   /// Additional variables needed for accelerated ADMM (only used if
@@ -404,8 +405,8 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
         By -
         (params.mode == ADMMMode::Accelerated ? B(y_hat, args...) : By_prev);
 
-    m_k = rho * inner_product_r(r, r, args...) +
-          rho * inner_product_r(By_diff, By_diff, args...);
+    m_k = sqrt(rho * inner_product_r(r, r, args...) +
+               rho * inner_product_r(By_diff, By_diff, args...));
 
     /// ACCELERATED ADMM UPDATE
     // Compute the Nestorov-accelerated forward-prediction step described in
