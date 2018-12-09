@@ -42,11 +42,11 @@ namespace Convex {
  * dx: composite update step for this iteration (= x_next - x)
  * dF: decrease in function value during the current iteration
  */
-template <typename Variable, typename... Args>
+template <typename Variable, typename Scalar = double, typename... Args>
 using ProximalGradientUserFunction =
-    std::function<void(unsigned int i, double t, const Variable &x, double F,
-                       double G_lambda, unsigned int linesearch_iters,
-                       const Variable &dx, double dF, Args &... args)>;
+    std::function<void(size_t i, double t, const Variable &x, Scalar F,
+                       Scalar G_lambda, size_t linesearch_iters,
+                       const Variable &dx, Scalar dF, Args &... args)>;
 
 enum class ProximalGradientMode {
   /// Basic proximal gradient
@@ -57,6 +57,7 @@ enum class ProximalGradientMode {
   // ADAPTIVE_STEPSIZE, // SpaRSA
 };
 
+template <typename Scalar = double>
 struct ProximalGradientParams : public OptimizerParams {
 
   /// Algorithm mode
@@ -65,7 +66,7 @@ struct ProximalGradientParams : public OptimizerParams {
   /// Step control parameters
 
   // An estimate of the Lipschitz parameter for grad_f (if known)
-  double L = 1;
+  Scalar L = 1;
 
   // A Boolean value indicating whether to use a constant stepsize, or perform
   // backtracking line search.  If a constant stepsize is used, L must be set to
@@ -75,7 +76,7 @@ struct ProximalGradientParams : public OptimizerParams {
 
   // Shrinkage parameter (multiplicative factor) for the stepsize when
   // performing backtracking line search
-  double beta = .5;
+  Scalar beta = .5;
 
   // A Boolean value indicating whether to employ O'Donoghue and Candes's
   // gradient-based adaptive restart scheme for accelerated gradient methods
@@ -85,18 +86,18 @@ struct ProximalGradientParams : public OptimizerParams {
   /// Termination criteria
 
   // Maximum number of iterations to perform during backtracking line search
-  unsigned int max_LS_iterations = 100;
+  size_t max_LS_iterations = 100;
 
   // Stopping tolerance based upon the norm of the composite gradient step:
   // G_lambda := (1/lambda) * (y - prox_{lambda * g}(y - lambda * grad_f(y)))
-  double composite_gradient_tolerance = 1e-3;
+  Scalar composite_gradient_tolerance = 1e-3;
 
   // Stopping tolerance based upon the normalized gradient residual
 
   // Stopping tolerance based on the normalized subgradient residual given in
   // eq. (42) of Goldstein et al.'s paper "A Field Guide to Forward-Backward
   // Splitting with a FASTA Implementation"
-  double relative_composite_gradient_tolerance = 1e-3;
+  Scalar relative_composite_gradient_tolerance = 1e-3;
 };
 
 enum class ProximalGradientStatus {
@@ -108,36 +109,38 @@ enum class ProximalGradientStatus {
 
 /** A useful struct used to hold the output of the proximal gradient
 optimization method */
-template <typename Variable>
-struct ProximalGradientResult : OptimizerResult<Variable> {
+template <typename Variable, typename Scalar = double>
+struct ProximalGradientResult : OptimizerResult<Variable, Scalar> {
 
   // The stopping condition that triggered algorithm termination
   ProximalGradientStatus status;
 
   // Norm of the composite gradient G_t at the *END* of each iteration
-  std::vector<double> composite_gradient_norms;
+  std::vector<Scalar> composite_gradient_norms;
 
   // Relative norm of the composite gradient G_t at the *END* of each iteration
-  std::vector<double> relative_composite_gradient_norms;
+  std::vector<Scalar> relative_composite_gradient_norms;
 };
 
-template <typename Variable, typename... Args>
-ProximalGradientResult<Variable> ProximalGradient(
-    const Objective<Variable, Args...> &f,
-    const GradientOperator<Variable, Args...> &grad_f,
-    const Objective<Variable, Args...> &g,
-    const ProximalOperator<Variable, Args...> &prox_g,
-    const InnerProduct<Variable, Args...> &inner_product, const Variable &x0,
-    Args &... args,
-    const ProximalGradientParams &params = ProximalGradientParams(),
-    const std::experimental::optional<
-        ProximalGradientUserFunction<Variable, Args...>> &user_function =
-        std::experimental::nullopt) {
+template <typename Variable, typename Scalar = double, typename... Args>
+ProximalGradientResult<Variable, Scalar>
+ProximalGradient(const Objective<Variable, Scalar, Args...> &f,
+                 const GradientOperator<Variable, Args...> &grad_f,
+                 const Objective<Variable, Scalar, Args...> &g,
+                 const ProximalOperator<Variable, Scalar, Args...> &prox_g,
+                 const InnerProduct<Variable, Scalar, Args...> &inner_product,
+                 const Variable &x0, Args &... args,
+                 const ProximalGradientParams<Scalar> &params =
+                     ProximalGradientParams<Scalar>(),
+                 const std::experimental::optional<
+                     ProximalGradientUserFunction<Variable, Scalar, Args...>>
+                     &user_function = std::experimental::nullopt) {
 
   /// Declare some useful variables
 
   // Composite objective function
-  Objective<Variable, Args...> F = [&](const Variable &X, Args &... args) {
+  Objective<Variable, Scalar, Args...> F = [&](const Variable &X,
+                                               Args &... args) {
     return f(X, args...) + g(X, args...);
   };
 
@@ -160,7 +163,7 @@ ProximalGradientResult<Variable> ProximalGradient(
 
   // Current gradient update stepsize; related to the Lipschitz constant
   // L for grad_f(y) via lambda in (0, 1/L]
-  double lambda;
+  Scalar lambda;
 
   // Image of the gradient update for the smooth term f in the objective,
   // applied to y:
@@ -179,27 +182,27 @@ ProximalGradientResult<Variable> ProximalGradient(
   Variable hat_y;
 
   // Value of the composite objective at the current iterate x
-  double F_x;
+  Scalar F_x;
 
   // Value of composite objective at the previous iterate x_prev;
-  double F_x_prev;
+  Scalar F_x_prev;
 
   // Norm of the composite gradient G_lambda;
-  double composite_gradient_norm;
+  Scalar composite_gradient_norm;
 
   // Norm of the relative residual
-  double relative_composite_gradient_norm;
+  Scalar relative_composite_gradient_norm;
 
   // Number of iterations performed in the backtracking linesearch in the
   // current iteration
-  unsigned int linesearch_iters = 0;
+  size_t linesearch_iters = 0;
 
   /// Parameters for use with accelerated proximal gradient method
   // Momentum parameter for current iterate and previous iterates
-  double t, t_prev;
+  Scalar t, t_prev;
 
   /// Output struct
-  ProximalGradientResult<Variable> result;
+  ProximalGradientResult<Variable, Scalar> result;
   result.status = ProximalGradientStatus::ITERATION_LIMIT;
 
   /// INITIALIZATION
@@ -214,14 +217,14 @@ ProximalGradientResult<Variable> ProximalGradient(
     std::cout.precision(params.precision);
   }
   // Field width for displaying outer iterations
-  unsigned int iter_field_width = floor(log10(params.max_iterations)) + 1;
+  size_t iter_field_width = floor(log10(params.max_iterations)) + 1;
 
   if (params.verbose)
     std::cout << "Proximal gradient optimization: " << std::endl << std::endl;
 
   /// ITERATE!
   auto start_time = Stopwatch::tick();
-  for (unsigned int i = 0; i < params.max_iterations; i++) {
+  for (size_t i = 0; i < params.max_iterations; i++) {
 
     double elapsed_time = Stopwatch::tock(start_time);
 
@@ -245,7 +248,7 @@ ProximalGradientResult<Variable> ProximalGradient(
 
       // Ensure sufficient decrease with respect to the quadratic model Q_L(x,y)
       // defined at the beginning of Sec. 1.4.1
-      double f_y = f(y, args...);
+      Scalar f_y = f(y, args...);
 
       while ((F_x > f_y + inner_product(x_minus_y, grad_f_y) +
                         (1 / (2 * lambda)) *
@@ -280,10 +283,10 @@ ProximalGradientResult<Variable> ProximalGradient(
     // Compute composite step dx for this iteration
     Variable dx = x - x_prev;
 
-    double norm_dx = sqrt(inner_product(dx, dx));
+    Scalar norm_dx = sqrt(inner_product(dx, dx));
 
     // Compute improvement in objective
-    double dF = F_x_prev - F_x;
+    Scalar dF = F_x_prev - F_x;
 
     // Compute composite gradient G_lambda
     Variable G_lambda = (-1 / lambda) * x_minus_y;
@@ -298,7 +301,7 @@ ProximalGradientResult<Variable> ProximalGradient(
 
     relative_composite_gradient_norm =
         composite_gradient_norm /
-        (std::max<double>(sqrt(inner_product(grad_f_x, grad_f_x)),
+        (std::max<Scalar>(sqrt(inner_product(grad_f_x, grad_f_x)),
                           sqrt(inner_product(subgrad_g_x, subgrad_g_x))) +
          1e-6);
 

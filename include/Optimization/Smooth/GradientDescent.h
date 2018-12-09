@@ -31,32 +31,34 @@ namespace Smooth {
  * h: the update step computed during this iteration
  * df: decrease in objective value obtained by applying the update step
  */
-template <typename Variable, typename Tangent, typename... Args>
+template <typename Variable, typename Tangent, typename Scalar = double,
+          typename... Args>
 using GradientDescentUserFunction =
-    std::function<void(unsigned int i, double t, const Variable &x, double f,
-                       const Tangent &g, const Tangent &h, double df,
+    std::function<void(size_t i, double t, const Variable &x, Scalar f,
+                       const Tangent &g, const Tangent &h, Scalar df,
                        Args &... args)>;
 
 /** A lightweight struct containing a few additional algorithm-specific
  * configuration parameters for a gradient descent optimization method
  * (cf. Section 4.2 of "Optimization Algorithms on Matrix Manifolds") */
-struct GradientDescentParams : public SmoothOptimizerParams {
+template <typename Scalar = double>
+struct GradientDescentParams : public SmoothOptimizerParams<Scalar> {
 
   // Initial trial stepsize for the Armijo linesearch (must be > 0)
-  double alpha = 1.0;
+  Scalar alpha = 1.0;
 
   // Shrinkage factor for the backtracking linesearch (must be in (0,1)).
-  double beta = .5;
+  Scalar beta = .5;
 
   // Sufficient fractional decrease for step acceptance (must be in (0,1)).
-  double sigma = .5;
+  Scalar sigma = .5;
 
   // Maximum number of linesearch iterations to attempt
-  unsigned int max_ls_iterations = 100;
+  size_t max_ls_iterations = 100;
 };
 
 /** A set of status flags indicating the stopping criterion that triggered
-* algorithm termination */
+ * algorithm termination */
 enum class GradientDescentStatus {
   /** The algorithm obtained a solution satisfying the gradient tolerance */
   GRADIENT,
@@ -84,31 +86,33 @@ enum class GradientDescentStatus {
 
 /** A useful struct used to hold the output of a gradient descent optimization
  * method */
-template <typename Variable>
-struct GradientDescentResult : public SmoothOptimizerResult<Variable> {
+template <typename Variable, typename Scalar = double>
+struct GradientDescentResult : public SmoothOptimizerResult<Variable, Scalar> {
 
   GradientDescentStatus status;
 
   // Number of linesearch iterations performed during each iteration of the
   // algorithm
-  std::vector<unsigned int> linesearch_iterations;
+  std::vector<size_t> linesearch_iterations;
 };
 
-template <typename Variable, typename Tangent, typename... Args>
-GradientDescentResult<Variable>
-GradientDescent(const Objective<Variable, Args...> &f,
-                const VectorField<Variable, Tangent, Args...> &grad_f,
-                const RiemannianMetric<Variable, Tangent, Args...> &metric,
-                const Retraction<Variable, Tangent, Args...> &retract,
-                const Variable &x0, Args &... args,
-                const GradientDescentParams &params = GradientDescentParams(),
-                const std::experimental::optional<
-                    GradientDescentUserFunction<Variable, Tangent, Args...>>
-                    &user_function = std::experimental::nullopt) {
+template <typename Variable, typename Tangent, typename Scalar = double,
+          typename... Args>
+GradientDescentResult<Variable, Scalar> GradientDescent(
+    const Objective<Variable, Scalar, Args...> &f,
+    const VectorField<Variable, Tangent, Args...> &grad_f,
+    const RiemannianMetric<Variable, Tangent, Scalar, Args...> &metric,
+    const Retraction<Variable, Tangent, Args...> &retract, const Variable &x0,
+    Args &... args,
+    const GradientDescentParams<Scalar> &params =
+        GradientDescentParams<Scalar>(),
+    const std::experimental::optional<
+        GradientDescentUserFunction<Variable, Tangent, Scalar, Args...>>
+        &user_function = std::experimental::nullopt) {
   /// Declare and initialize some useful variables
 
-  // Square root of machine precision for doubles
-  double sqrt_eps = sqrt(std::numeric_limits<double>::epsilon());
+  // Square root of machine precision for Scalars
+  Scalar sqrt_eps = sqrt(std::numeric_limits<Scalar>::epsilon());
 
   // Current and proposed next iterates
   Variable x, x_proposed;
@@ -117,38 +121,38 @@ GradientDescent(const Objective<Variable, Args...> &f,
   Tangent grad_f_x;
 
   // Norm of the Riemannian gradient at the current iterate
-  double grad_f_x_norm;
+  Scalar grad_f_x_norm;
 
   // Proposed update vector
   Tangent h;
 
   // Norm of update step
-  double h_norm;
+  Scalar h_norm;
 
   // Number of linesearches performed during the current iteration
-  unsigned int ls_iters = 0;
+  size_t ls_iters = 0;
 
   // Function values at the current iterate proposed iterates, respectively
-  double f_x, f_x_proposed;
+  Scalar f_x, f_x_proposed;
 
   // Decrease in function value between subsequent iterations
-  double df;
+  Scalar df;
 
   // Relative decrease in function value between the current and proposed
   // iterates
-  double relative_decrease;
+  Scalar relative_decrease;
 
   // Some useful constants for display purposes
 
   // Field with for displaying outer iterations
-  unsigned int iter_field_width = floor(log10(params.max_iterations)) + 1;
+  size_t iter_field_width = floor(log10(params.max_iterations)) + 1;
 
   // Field width for displaying linesearch iterations
-  unsigned int linesearch_iter_field_width =
+  size_t linesearch_iter_field_width =
       floor(log10(params.max_ls_iterations)) + 1;
 
   // Output struct
-  GradientDescentResult<Variable> result;
+  GradientDescentResult<Variable, Scalar> result;
   result.status = GradientDescentStatus::ITERATION_LIMIT;
 
   /// INITIALIZATION
@@ -173,8 +177,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
   // Start clock
   auto start_time = Stopwatch::tick();
 
-  for (unsigned int iteration = 0; iteration < params.max_iterations;
-       iteration++) {
+  for (size_t iteration = 0; iteration < params.max_iterations; iteration++) {
     double elapsed_time = Stopwatch::tock(start_time);
 
     if (elapsed_time > params.max_computation_time) {
@@ -209,7 +212,7 @@ GradientDescent(const Objective<Variable, Args...> &f,
     // Armijo stepsize
     // Set t_A here so that t_A = alpha when executing the first iteration of
     // the following do-while
-    double t_A = params.alpha / params.beta;
+    Scalar t_A = params.alpha / params.beta;
     ls_iters = 0;
 
     bool accept = false;
@@ -347,24 +350,24 @@ GradientDescent(const Objective<Variable, Args...> &f,
  * descent interface for the (common) use case of optimization over Euclidean
  * spaces */
 
-template <typename Vector, typename... Args>
+template <typename Vector, typename Scalar = double, typename... Args>
 using EuclideanGradientDescentUserFunction =
-    GradientDescentUserFunction<Vector, Vector, Args...>;
+    GradientDescentUserFunction<Vector, Vector, Scalar, Args...>;
 
-template <typename Vector, typename... Args>
-GradientDescentResult<Vector> EuclideanGradientDescent(
-    const Objective<Vector, Args...> &f,
+template <typename Vector, typename Scalar = double, typename... Args>
+GradientDescentResult<Vector, Scalar> EuclideanGradientDescent(
+    const Objective<Vector, Scalar, Args...> &f,
     const EuclideanVectorField<Vector, Args...> grad_f, const Vector &x0,
     Args &... args,
-    const GradientDescentParams &params = GradientDescentParams(),
-    const std::experimental::optional<
-        EuclideanGradientDescentUserFunction<Vector, Args...>> &user_function =
-        std::experimental::nullopt) {
+    const GradientDescentParams<Scalar> &params =
+        GradientDescentParams<Scalar>(),
+    const std::experimental::optional<EuclideanGradientDescentUserFunction<
+        Vector, Scalar, Args...>> &user_function = std::experimental::nullopt) {
 
   /// Run gradient descent using these Euclidean operators
-  return GradientDescent<Vector, Vector, Args...>(
-      f, grad_f, EuclideanMetric<Vector, Args...>,
+  return GradientDescent<Vector, Vector, Scalar, Args...>(
+      f, grad_f, EuclideanMetric<Vector, Scalar, Args...>,
       EuclideanRetraction<Vector, Args...>, x0, args..., params, user_function);
 }
-} // Smooth
-} // Optimization
+} // namespace Smooth
+} // namespace Optimization

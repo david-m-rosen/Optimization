@@ -6,12 +6,26 @@ project(Optimization LANGUAGES CXX VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 14) # We require C++ 14 or later
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Set build type using a dropdown menu
-set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Select build type")
-set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS RelWithDebInfo Release Debug MinSizeRel)
-set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR}/bin CACHE PATH "The directory in which to place executables built by this project")
+# Set build type to 'RelWithDebInfo' if one was not specified by the user
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel." FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS RelWithDebInfo Release Debug MinSizeRel)
+  message(STATUS "Setting build type to ${CMAKE_BUILD_TYPE}, as none was specified\n")
+else()
+  message(STATUS "Building in ${CMAKE_BUILD_TYPE} mode\n")
+endif()
+
+# BUILD CONFIGURATIONS
+# Build the examples?
+set(BUILD_EXAMPLES OFF CACHE BOOL "Build example executables? [disabled by default]")
+# Build the unit tests?
+set(BUILD_TESTS OFF CACHE BOOL "Build unit tests? [disabled by default]")
+# Enable faster instruction sets (SIMD/AVX)?
+set(ENABLE_FAST_INSTRUCTIONS ON CACHE BOOL "Enable faster instruction sets (SIMD/AVX)? [enabled by default]")
 
 message(STATUS "Processing CMakeLists for header-only library ${PROJECT_NAME}:\n")
+
+# SET UP EXPORT OF OPTIMIZATION LIBRARY
 
 # We declare this library as an INTERFACE library; this means that it does not directly produce built output, though it may have properties set on it and it may be installed, exported and imported.
 add_library(${PROJECT_NAME} INTERFACE)
@@ -40,21 +54,28 @@ message(STATUS "Found ${PROJECT_NAME} header files:\n ${OPTIMIZATION_HDRS}")
 # List the complete set of header files as source files.
 target_sources(${PROJECT_NAME} INTERFACE ${OPTIMIZATION_HDRS})
 
-
-# Define some additional (optional) named targets, not built by default.  Typically, these will be e.g. unit tests, example executables.
-
-# This is the name of the target in the generated Makefile that builds the example executables; i.e., to build these, one must type "make $EXAMPLES_TARGET_NAME" using the generated Makefile in order to build the example executables (we do this because we don't want these executables to be automatically built by other CMake projects that use this one as a dependency)
-set(EXAMPLES_TARGET_NAME examples)
-add_subdirectory(examples)
-
-message(STATUS "CMake configuration finished.\n\nType 'make ${EXAMPLES_TARGET_NAME}' to build the example optimization executables in directory ${EXECUTABLE_OUTPUT_PATH}
-    \n")
-
-
-
-# EXPORT OPTIMIZATION LIBRARY 
+# Export Optimization library
 
 # Add add entry for this project into CMake's package registry, so that this project can be found by other CMake projects
 export(PACKAGE ${PROJECT_NAME})
 # Create a configuration file for this project, so that it can be imported by other CMake projects
 export(TARGETS ${PROJECT_NAME} FILE ${PROJECT_NAME}Config.cmake)
+
+
+# SET UP [OPTIONAL] CODE EXAMPLES AND TESTS
+
+# Define some additional (optional) named targets, not built by default.  Typically, these will be e.g. unit tests, example executables.
+
+# This is the name of the target in the generated Makefile that builds the example executables; i.e., to build these, one must type "make $EXAMPLES_TARGET_NAME" using the generated Makefile in order to build the example executables (we do this because we don't want these executables to be automatically built by other CMake projects that use this one as a dependency)
+if(${BUILD_EXAMPLES})
+set(EXAMPLES_TARGET_NAME examples)
+message(STATUS "Adding examples to build system as target ${EXAMPLES_TARGET_NAME}")
+add_subdirectory(examples)
+endif()
+
+# This is the name of the target in the generated Makefile that builds the tests; i.e., to build these, one must type "make $TESTS_TARGET_NAME" using the generated Makefile in order to build the example executables (we do this because we don't want these executables to be automatically built by other CMake projects that use this one as a dependency)
+if(${BUILD_TESTS})
+set(TESTS_TARGET_NAME tests)
+message(STATUS "Adding unit tests to build as target ${TESTS_TARGET_NAME}")
+add_subdirectory(tests)
+endif()

@@ -48,10 +48,27 @@ template <typename Variable, typename Tangent, typename... Args>
 using LinearOperator =
     std::function<Tangent(const Variable &X, const Tangent &V, Args &... args)>;
 
+/** An alias template for a function that constructs the Hessian operator
+ * Hess F : T_X(M) -> T_X(M) on the tangent space of a manifold M at X */
+template <typename Variable, typename Tangent, typename... Args>
+using HessianConstructor =
+    std::function<LinearOperator<Variable, Tangent, Args...>(const Variable &X,
+                                                             Args &... args)>;
+
+/** An alias template for a function that accepts as input a Variable X,
+ * and returns the gradient and Hessian operator that determine the local
+ * quadratic model of an objective function f(X) on the tangent space T_X. */
+template <typename Variable, typename Tangent, typename... Args>
+using QuadraticModel =
+    std::function<void(const Variable &X, Tangent &gradient,
+                       LinearOperator<Variable, Tangent, Args...> &Hessian,
+                       Args &... args)>;
+
 /** An alias template for a Riemannian metric; this assigns to each tangent
  * space T_X an inner product g : T_X x T_X -> R. */
-template <typename Variable, typename Tangent, typename... Args>
-using RiemannianMetric = std::function<double(
+template <typename Variable, typename Tangent, typename Scalar = double,
+          typename... Args>
+using RiemannianMetric = std::function<Scalar(
     const Variable &X, const Tangent &V1, const Tangent &V2, Args &...)>;
 
 /** An alias template for a retraction operator: a std::function that accepts as
@@ -62,46 +79,38 @@ template <typename Variable, typename Tangent, typename... Args>
 using Retraction = std::function<Variable(
     const Variable &X, const Tangent &update, Args &... args)>;
 
-/** An alias template for a std::function that accepts as input a Variable X,
- * and returns the gradient and Hessian operator that determine a local
- * quadratic model of an objective function f(X) on the tangent space T_X. */
-template <typename Variable, typename Tangent, typename... Args>
-using QuadraticModel =
-    std::function<void(const Variable &X, Tangent &gradient,
-                       LinearOperator<Variable, Tangent, Args...> &Hessian,
-                       Args &... args)>;
-
 /** A lightweight struct containing configuration parameters
  * for a Riemannian optimization method */
+template <typename Scalar = double>
 struct SmoothOptimizerParams : public OptimizerParams {
 
   /// Additional termination criteria for smooth optimization methods
 
   // Stopping tolerance for norm of the Riemannian gradient
-  double gradient_tolerance = 1e-6;
+  Scalar gradient_tolerance = 1e-6;
 
   // Stopping tolerance for the relative decrease in function value between
   // subsequent accepted iterations
-  double relative_decrease_tolerance = 1e-6;
+  Scalar relative_decrease_tolerance = 1e-6;
 
   // Stopping tolerance for the norm of the accepted stepsize; terminate if the
   // accepted step h has norm less than this value
-  double stepsize_tolerance = 1e-6;
+  Scalar stepsize_tolerance = 1e-6;
 };
 
 /** A template struct containing the output of a Riemannian optimization method
  */
-template <typename Variable>
-struct SmoothOptimizerResult : public OptimizerResult<Variable> {
+template <typename Variable, typename Scalar = double>
+struct SmoothOptimizerResult : public OptimizerResult<Variable, Scalar> {
 
   // The norm of the gradient at the returned estimate
-  double grad_f_x_norm;
+  Scalar grad_f_x_norm;
 
   // The norm of the gradient at the *start* of each iteration
-  std::vector<double> gradient_norms;
+  std::vector<Scalar> gradient_norms;
 
   // The norm of the update step computed during each iteration
-  std::vector<double> update_step_norm;
+  std::vector<Scalar> update_step_norm;
 };
 
 /** These next typedefs provide convenient specializations of the above
@@ -123,10 +132,15 @@ template <typename Vector, typename... Args>
 using EuclideanLinearOperator = LinearOperator<Vector, Vector, Args...>;
 
 template <typename Vector, typename... Args>
-using EuclideanQuadraticModel = QuadraticModel<Vector, Vector, Args...>;
+using EuclideanHessianConstructor =
+    std::function<LinearOperator<Vector, Vector, Args...>(const Vector &X,
+                                                          Args &... args)>;
 
 template <typename Vector, typename... Args>
-double EuclideanMetric(const Vector &X, const Vector &V1, const Vector &V2,
+using EuclideanQuadraticModel = QuadraticModel<Vector, Vector, Args...>;
+
+template <typename Vector, typename Scalar = double, typename... Args>
+Scalar EuclideanMetric(const Vector &X, const Vector &V1, const Vector &V2,
                        Args &... args) {
   return V1.dot(V2);
 }
@@ -136,5 +150,5 @@ Vector EuclideanRetraction(const Vector &X, const Vector &V, Args &... args) {
   return X + V;
 }
 
-} // Smooth
-} // Optimization
+} // namespace Smooth
+} // namespace Optimization

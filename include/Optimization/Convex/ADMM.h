@@ -43,14 +43,14 @@ namespace Convex {
  */
 
 template <typename VariableX, typename VariableY, typename VariableR,
-          typename... Args>
+          typename Scalar = double, typename... Args>
 using AugLagMinX = std::function<VariableX(
-    const VariableY &y, const VariableR &lambda, double rho, Args &... args)>;
+    const VariableY &y, const VariableR &lambda, Scalar rho, Args &... args)>;
 
 template <typename VariableX, typename VariableY, typename VariableR,
-          typename... Args>
+          typename Scalar = double, typename... Args>
 using AugLagMinY = std::function<VariableY(
-    const VariableX &x, const VariableR &lambda, double rho, Args &... args)>;
+    const VariableX &x, const VariableR &lambda, Scalar rho, Args &... args)>;
 
 /** An alias template for a user-definable function that can be
  * used to access various interesting bits of information about the internal
@@ -69,10 +69,10 @@ using AugLagMinY = std::function<VariableY(
  * s: dual residual at the *end* of the current iteration
  */
 template <typename VariableX, typename VariableY, typename VariableR,
-          typename... Args>
+          typename Scalar = double, typename... Args>
 using ADMMUserFunction =
-    std::function<void(unsigned int i, double t, const VariableX &x,
-                       const VariableY &y, const VariableR &lambda, double rho,
+    std::function<void(size_t i, double t, const VariableX &x,
+                       const VariableY &y, const VariableR &lambda, Scalar rho,
                        const VariableR &r, const VariableX &s, Args &... args)>;
 
 /** A simple enumeration type describing the strategy used to adapt the penalty
@@ -101,12 +101,12 @@ enum class ADMMMode {
   Accelerated,
 };
 
-struct ADMMParams : public OptimizerParams {
+template <typename Scalar = double> struct ADMMParams : public OptimizerParams {
 
   /// PENALTY PARAMETER SETTINGS
 
   /** (Initial) value of penalty parameter rho */
-  double rho = 1.0;
+  Scalar rho = 1.0;
 
   /** Adaptation strategy for penalty parameter (currently only supported in
    * 'simple' mode) */
@@ -115,14 +115,13 @@ struct ADMMParams : public OptimizerParams {
   /** If penalty_adaptation_mode != None, this parameter controls how
    * frequently (in terms of number of iterations) the penalty parameter is
    * updated */
-  unsigned int penalty_adaptation_period = 2;
+  size_t penalty_adaptation_period = 2;
 
   /** This value sets an upper limit (in terms of number of iterations) on the
    * window within which the augmented Lagrangian penalty parameter will be
    * adjusted -- this is to ensure that the penalty parameter will eventually be
    * constant, so that the ADMM algorithm is guaranteed to converge */
-  unsigned int penalty_adaptation_window =
-      std::numeric_limits<unsigned int>::max();
+  size_t penalty_adaptation_window = std::numeric_limits<size_t>::max();
 
   /** If the 'Residual_Balance' adaptation strategy is used, this value sets the
    * threshold for the maximum admissible ratio between the primal and dual
@@ -149,7 +148,7 @@ struct ADMMParams : public OptimizerParams {
   obtained in order to accept an accelerated iteration.  This value should be in
   the range (0, 1), and is best taken close to 1 (to provide a permissive
   acceptance criterion for acceleration) */
-  double eta = .999;
+  Scalar eta = .999;
 
   /** Termination criteria:
    *
@@ -174,13 +173,13 @@ struct ADMMParams : public OptimizerParams {
    */
 
   /** Absolute primal stopping tolerance */
-  double eps_abs_pri = 1e-2;
+  Scalar eps_abs_pri = 1e-2;
 
   /** Absolute dual stopping tolerance */
-  double eps_abs_dual = 1e-2;
+  Scalar eps_abs_dual = 1e-2;
 
   /** Relative stopping tolerance */
-  double eps_rel = 1e-3;
+  Scalar eps_rel = 1e-3;
 };
 
 /** Enum class that describes the termination status of the algorithm */
@@ -213,9 +212,10 @@ enum class ADMMIterationType {
 };
 
 /** A useful struct used to hold the output of the ADMM algorithm */
-template <typename VariableX, typename VariableY, typename VariableR>
+template <typename VariableX, typename VariableY, typename VariableR,
+          typename Scalar = double>
 struct ADMMResult
-    : OptimizerResult<std::tuple<VariableX, VariableY, VariableR>> {
+    : OptimizerResult<std::tuple<VariableX, VariableY, VariableR>, Scalar> {
 
   /** The stopping condition that triggered algorithm termination */
   ADMMStatus status;
@@ -234,11 +234,11 @@ struct ADMMResult
    * defined in the paper "On Non-Ergodic Convergence Rate of Douglas-Rachford
    * Alternating Direction Method of Multipliers", by B.S. He and X. Yuan (cf.
    * eq. (3.6) and Theorem 5.1) at the end of each iteration */
-  std::vector<double> m_k;
+  std::vector<Scalar> m_k;
 
   /** The sequence of augmented Lagrangian penalty parameters employed by
    * the algorithm at each iteration.*/
-  std::vector<double> penalty_parameters;
+  std::vector<Scalar> penalty_parameters;
 
   /** A vector containing the classification of each iteration performed by the
    * ADMM algorithm */
@@ -249,10 +249,11 @@ struct ADMMResult
  * strategy for the augmented Lagrangian penalty parameter (cf. equation (3.13)
  * of "Distributed Optimization and Statistical Learning via the Alternating
  * Direction Method of Multipliers) */
-double residual_balance_penalty_parameter_update(double primal_residual,
-                                                 double dual_residual,
-                                                 double mu, double tau,
-                                                 double rho) {
+template <typename Scalar = double>
+Scalar residual_balance_penalty_parameter_update(Scalar primal_residual,
+                                                 Scalar dual_residual,
+                                                 Scalar mu, Scalar tau,
+                                                 Scalar rho) {
   if (primal_residual > mu * dual_residual)
     return tau * rho;
   else if (dual_residual > mu * primal_residual)
@@ -262,19 +263,19 @@ double residual_balance_penalty_parameter_update(double primal_residual,
 }
 
 template <typename VariableX, typename VariableY, typename VariableR,
-          typename... Args>
-ADMMResult<VariableX, VariableY, VariableR>
-ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
-     const AugLagMinY<VariableX, VariableY, VariableR, Args...> &minLy,
+          typename Scalar = double, typename... Args>
+ADMMResult<VariableX, VariableY, VariableR, Scalar>
+ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Scalar, Args...> &minLx,
+     const AugLagMinY<VariableX, VariableY, VariableR, Scalar, Args...> &minLy,
      const LinearOperator<VariableX, VariableR, Args...> &A,
      const LinearOperator<VariableY, VariableR, Args...> &B,
      const LinearOperator<VariableR, VariableX, Args...> &At,
-     const InnerProduct<VariableX, Args...> inner_product_x,
-     const InnerProduct<VariableR, Args...> inner_product_r, const VariableR &c,
-     const VariableX &x0, const VariableY &y0, Args... args,
-     const ADMMParams &params = ADMMParams(),
+     const InnerProduct<VariableX, Scalar, Args...> inner_product_x,
+     const InnerProduct<VariableR, Scalar, Args...> inner_product_r,
+     const VariableR &c, const VariableX &x0, const VariableY &y0, Args... args,
+     const ADMMParams<Scalar> &params = ADMMParams<Scalar>(),
      const std::experimental::optional<
-         ADMMUserFunction<VariableX, VariableY, VariableR, Args...>>
+         ADMMUserFunction<VariableX, VariableY, VariableR, Scalar, Args...>>
          &user_function = std::experimental::nullopt) {
 
   /// Declare some useful variables
@@ -287,7 +288,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   VariableR lambda;
 
   // Current value of augmented Lagrangian penalty parameter
-  double rho;
+  Scalar rho;
 
   // Cache variables for intermediate products Ax, By
   VariableR Ax, By;
@@ -305,12 +306,12 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   // Previous iterate of y (needed for the dual residual computation)
   VariableY y_prev;
 
-  double c_norm = sqrt(inner_product_r(c, c, args...));
+  Scalar c_norm = sqrt(inner_product_r(c, c, args...));
 
   ADMMIterationType iteration_type;
 
   // Primal and dual residual values
-  double primal_residual, dual_residual;
+  Scalar primal_residual, dual_residual;
 
   // Monotonically non-increasing convergence measure defined in the paper "On
   // Non-Ergodic Convergence Rate of Douglas-Rachford Alternating Direction
@@ -318,7 +319,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   // Theorem 5.1).
   //
   //  m_k := sqrt( rho * |B(y_k - y_{k-1})|^2 + rho * |r_k|^2 )
-  double m_k, m_kminus1;
+  Scalar m_k, m_kminus1;
 
   /// Additional variables needed for accelerated ADMM (only used if
   /// ADMMMode == Accelerated)
@@ -328,7 +329,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
   VariableR lambda_prev; // Previous value of dual variable
 
   // Acceleration forward-prediction weighting sequence
-  double alpha_k, alpha_kplus1;
+  Scalar alpha_k, alpha_kplus1;
 
   /// Output struct
   ADMMResult<VariableX, VariableY, VariableR> result;
@@ -363,14 +364,14 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     std::cout.precision(params.precision);
   }
   // Field width for displaying outer iterations
-  unsigned int iter_field_width = floor(log10(params.max_iterations)) + 1;
+  size_t iter_field_width = floor(log10(params.max_iterations)) + 1;
 
   if (params.verbose)
     std::cout << "ADMM optimization: " << std::endl << std::endl;
 
   /// ITERATE!
   auto start_time = Stopwatch::tick();
-  for (unsigned int iter = 0; iter < params.max_iterations; ++iter) {
+  for (size_t iter = 0; iter < params.max_iterations; ++iter) {
 
     /// ADMM ITERATION
 
@@ -523,17 +524,17 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
     }
 
     /// Compute primal stopping tolerance (Sec. 3.3.1)
-    double Ax_norm = sqrt(inner_product_r(Ax, Ax, args...));
-    double By_norm = sqrt(inner_product_r(By, By, args...));
-    double eps_primal =
+    Scalar Ax_norm = sqrt(inner_product_r(Ax, Ax, args...));
+    Scalar By_norm = sqrt(inner_product_r(By, By, args...));
+    Scalar eps_primal =
         params.eps_abs_pri +
-        params.eps_rel * std::max<double>({Ax_norm, By_norm, c_norm});
+        params.eps_rel * std::max<Scalar>({Ax_norm, By_norm, c_norm});
 
     /// Compute dual stopping tolerance (Sec. 3.3.1)
     const VariableX At_lambda = At(lambda, args...);
-    double At_lambda_norm =
+    Scalar At_lambda_norm =
         sqrt(inner_product_x(At_lambda, At_lambda, args...));
-    double eps_dual = params.eps_abs_dual + params.eps_rel * At_lambda_norm;
+    Scalar eps_dual = params.eps_abs_dual + params.eps_rel * At_lambda_norm;
 
     /// Test residual-based stopping criterion
     if ((primal_residual < eps_primal) && (dual_residual < eps_dual)) {
@@ -572,7 +573,7 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
       lambda_prev = lambda;
       alpha_k = alpha_kplus1;
       m_kminus1 = (iteration_type == ADMMIterationType::Restart
-                       ? std::numeric_limits<double>::max()
+                       ? std::numeric_limits<Scalar>::max()
                        : m_k);
     }
 
@@ -625,20 +626,20 @@ ADMM(const AugLagMinX<VariableX, VariableY, VariableR, Args...> &minLx,
  * interface for the (common) use case in which a single data type is used to
  * represent each variable */
 
-template <typename Variable, typename... Args>
-ADMMResult<Variable, Variable, Variable>
-ADMM(const AugLagMinX<Variable, Variable, Variable, Args...> &minLx,
-     const AugLagMinY<Variable, Variable, Variable, Args...> &minLy,
+template <typename Variable, typename Scalar = double, typename... Args>
+ADMMResult<Variable, Variable, Variable, Scalar>
+ADMM(const AugLagMinX<Variable, Variable, Variable, Scalar, Args...> &minLx,
+     const AugLagMinY<Variable, Variable, Variable, Scalar, Args...> &minLy,
      const LinearOperator<Variable, Variable, Args...> &A,
      const LinearOperator<Variable, Variable, Args...> &B,
      const LinearOperator<Variable, Variable, Args...> &At,
-     const InnerProduct<Variable, Args...> inner_product, const Variable &c,
-     const Variable &x0, const Variable &y0, Args... args,
-     const ADMMParams &params = ADMMParams(),
+     const InnerProduct<Variable, Scalar, Args...> inner_product,
+     const Variable &c, const Variable &x0, const Variable &y0, Args... args,
+     const ADMMParams<Scalar> &params = ADMMParams<Scalar>(),
      const std::experimental::optional<
-         ADMMUserFunction<Variable, Variable, Variable, Args...>>
+         ADMMUserFunction<Variable, Variable, Variable, Scalar, Args...>>
          &user_function = std::experimental::nullopt) {
-  return ADMM<Variable, Variable, Variable, Args...>(
+  return ADMM<Variable, Variable, Variable, Scalar, Args...>(
       minLx, minLy, A, B, At, inner_product, inner_product, c, x0, y0, args...,
       params, user_function);
 }

@@ -15,17 +15,18 @@ int main() {
    *
    */
 
+  typedef float Scalar;
   typedef Eigen::VectorXd Variable;
   Eigen::Matrix2d A;
   A << 1000, 0, 0, 1.0;
   Variable b = Eigen::Vector2d(1, 1);
-  double mu = 100;
+  Scalar mu = 100;
 
-  InnerProduct<Variable> inner_product =
+  InnerProduct<Variable, Scalar> inner_product =
       [&](const Variable &v1, const Variable &v2) { return v1.dot(v2); };
 
   // Define f and grad_f
-  Objective<Variable> f = [&](const Variable &x) {
+  Objective<Variable, Scalar> f = [&](const Variable &x) {
     return (A * x - b).squaredNorm();
   };
 
@@ -34,9 +35,12 @@ int main() {
   };
 
   // Define g and prox_{lambda g}
-  Objective<Variable> g = [&](const Variable &x) { return mu * x.norm(); };
+  Objective<Variable, Scalar> g = [&](const Variable &x) {
+    return mu * x.norm();
+  };
 
-  ProximalOperator<Variable> prox_g = [&](const Variable &x, double lambda) {
+  ProximalOperator<Variable, Scalar> prox_g = [&](const Variable &x,
+                                                  Scalar lambda) {
     /** The proximal operator for the weighted L2 norm is the block-soft
      * thresholding operator:
      *
@@ -70,7 +74,7 @@ int main() {
   /// OPTIMIZE!
 
   /// Set optimization algorithm parameters
-  ProximalGradientParams params;
+  ProximalGradientParams<Scalar> params;
   params.verbose = true;
   params.max_iterations = 1000000;
   // params.adaptive_restart = false;
@@ -78,8 +82,9 @@ int main() {
   params.composite_gradient_tolerance = 1e-4;
 
   cout << "Optimizing!" << endl << endl;
-  ProximalGradientResult<Variable> result = ProximalGradient<Variable>(
-      f, grad_f, g, prox_g, inner_product, x0, params);
+  ProximalGradientResult<Variable, Scalar> result =
+      ProximalGradient<Variable, Scalar>(f, grad_f, g, prox_g, inner_product,
+                                         x0, params);
 
   cout << "Final result:" << endl;
   cout << "F(x) = " << result.f << endl;

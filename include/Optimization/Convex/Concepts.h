@@ -38,8 +38,8 @@ namespace Convex {
  * intermediate results in different parts of the computation.
  */
 
-/** An alias template for a std::function that accepts as input an argument of
- * type Variable, and returns the gradient grad_f(x) of a function f, evalauted
+/** An alias template for a function that accepts as input an argument of
+ * type Variable, and returns the gradient grad_f(x) of a function f, evaluated
  * at x.  Note that here we represent the gradient as another element of type
  * Variable (i.e., we are exploiting the identification T_A(X) = A between an
  * affine space A and its tangent spaces). */
@@ -48,9 +48,9 @@ using GradientOperator =
     std::function<Variable(const Variable &X, Args &... args)>;
 
 /** An alias template for an inner product */
-template <typename Variable, typename... Args>
+template <typename Variable, typename Scalar = double, typename... Args>
 using InnerProduct =
-    std::function<double(const Variable &X, const Variable &Y, Args &... args)>;
+    std::function<Scalar(const Variable &X, const Variable &Y, Args &... args)>;
 
 /** An alias template for a linear operator A : X -> Y between two (possibly
  * distinct) linear spaces.
@@ -65,9 +65,9 @@ using LinearOperator =
  *
  * prox_{lambda f}(x) := argmin_z [ f(z) + (1 / (2*lambda)) ||z - x||_2 ]
  */
-template <typename Variable, typename... Args>
+template <typename Variable, typename Scalar = double, typename... Args>
 using ProximalOperator =
-    std::function<Variable(const Variable &X, double lambda, Args &... args)>;
+    std::function<Variable(const Variable &X, Scalar lambda, Args &... args)>;
 
 } // namespace Convex
 } // namespace Optimization

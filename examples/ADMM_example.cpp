@@ -8,7 +8,6 @@
 
 using namespace Optimization;
 using namespace Optimization::Convex;
-using namespace Eigen;
 using namespace std;
 
 bool write_output = false;
@@ -35,45 +34,49 @@ int main() {
 
   /// SETUP
 
-  unsigned int m = 1500;  // Dimensionality of observations
-  unsigned int n = 5000;  // Dimensionality of latent vector x
-  unsigned int nnz = 100; // Number of nonzero elements of x
-  double sigma = .1; // Standard deviation of additive noise on measurements
-  double mu;         // Regularization parameter for Lasso
+  typedef double Scalar;
+  typedef Eigen::Matrix<Scalar, Eigen::Dynamic, 1> Vector;
+  typedef Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> Matrix;
+
+  size_t m = 1500;   // Dimensionality of observations
+  size_t n = 5000;   // Dimensionality of latent vector x
+  size_t nnz = 100;  // Number of nonzero elements of x
+  Scalar sigma = .1; // Standard deviation of additive noise on measurements
+  Scalar mu;         // Regularization parameter for Lasso
 
   // Set up some standard random number generators
   std::default_random_engine generator;
 
   // Standard normal distribution
-  std::normal_distribution<double> std_norm(0.0, 1.0);
+  std::normal_distribution<Scalar> std_norm(0.0, 1.0);
 
   // Standard (integer-valued) uniform distribution on the interval [0, n)
-  std::uniform_int_distribution<int> uniform(0, n);
+  std::uniform_int_distribution<size_t> uniform(0, n);
 
   /// Construct matrix A
 
   cout << "Constructing sensing matrix A ... " << endl;
-  MatrixXd A(m, n);
+  Matrix A(m, n);
 
   // Sample elements of A iid from a standard Gaussian distribution
-  for (unsigned int r = 0; r < m; ++r)
-    for (unsigned int c = 0; c < n; ++c) {
+  for (size_t r = 0; r < m; ++r)
+    for (size_t c = 0; c < n; ++c) {
       A(r, c) = std_norm(generator);
     }
 
   // Normalize the columns of A
-  for (unsigned int c = 0; c < n; ++c)
+  for (size_t c = 0; c < n; ++c)
     A.col(c) *= (1 / A.col(c).norm());
 
   /// Construct ground-truth vector x_true
   cout << "Constructing ground-truth vector x ... " << endl;
-  VectorXd x_true = VectorXd::Zero(n);
+  Vector x_true = Vector::Zero(n);
 
   // Randomly set nnz elements of x_true to be nonzero, sampled from a standard
   // uniform gaussian
-  for (unsigned int i = 0; i < nnz; ++i) {
+  for (size_t i = 0; i < nnz; ++i) {
     // Sample index of nonzero element
-    unsigned int idx = uniform(generator);
+    size_t idx = uniform(generator);
 
     // Sample a random value for this element from the standard normal
     // distribution
@@ -82,9 +85,9 @@ int main() {
 
   /// Now generate a noisy observation of x_true via the sensing matrix A
   cout << "Generating noisy observation b ... " << endl;
-  VectorXd b = A * x_true;
+  Vector b = A * x_true;
 
-  for (unsigned int i = 0; i < m; ++i)
+  for (size_t i = 0; i < m; ++i)
     b(i) += std_norm(generator);
 
   /// SET UP ADMM
@@ -92,7 +95,7 @@ int main() {
   cout << "Setting up ADMM ... " << endl << endl;
 
   // ADMM params
-  ADMMParams params;
+  ADMMParams<Scalar> params;
   params.max_iterations = 250;
   params.verbose = true; // Turn on verbose output
   params.log_iterates = true;
@@ -119,20 +122,20 @@ int main() {
   /// x = (A^T A + rho * I) * (A^T b + rho * y - lambda)
 
   // Compute and cache matrix A^T A
-  MatrixXd AtA = A.transpose() * A;
+  Matrix AtA = A.transpose() * A;
 
   // Compute and cache constant vector A^T b
-  VectorXd Atb = A.transpose() * b;
+  Vector Atb = A.transpose() * b;
 
   // Set regularization parameter to .1 |A^T * b|_{infty}
-  mu = .1 * Atb.lpNorm<Infinity>();
+  mu = .1 * Atb.lpNorm<Eigen::Infinity>();
 
   // Construct x-minimization function, making use of the (cached)
   // coefficient matrix A and Cholesky factor L
-  AugLagMinX<VectorXd, VectorXd, VectorXd> minLx =
-      [&](const VectorXd &y, const VectorXd &lambda, double rho) -> VectorXd {
+  AugLagMinX<Vector, Vector, Vector, Scalar> minLx =
+      [&](const Vector &y, const Vector &lambda, double rho) -> Vector {
     // Compute Cholseky factorization of A^T*A + rho * I
-    LLT<MatrixXd> L(AtA + rho * MatrixXd::Identity(n, n));
+    Eigen::LLT<Matrix> L(AtA + rho * Matrix::Identity(n, n));
 
     return L.solve(Atb + rho * y - lambda);
   };
@@ -157,43 +160,43 @@ int main() {
   /// Multipliers").
 
   // Define soft-thresholding operator for a vector v
-  auto S = [](const VectorXd &v, double kappa) -> VectorXd {
-    VectorXd k = VectorXd::Constant(v.rows(), kappa);
+  auto S = [](const Vector &v, Scalar kappa) -> Vector {
+    Vector k = Vector::Constant(v.rows(), kappa);
 
     return (v - k).cwiseMax(0) - (-v - k).cwiseMax(0);
   };
 
-  AugLagMinY<VectorXd, VectorXd, VectorXd> minLy =
-      [&](const VectorXd &x, const VectorXd &lambda, double rho) -> VectorXd {
+  AugLagMinY<Vector, Vector, Vector> minLy =
+      [&](const Vector &x, const Vector &lambda, double rho) -> Vector {
     return S(x + (1 / rho) * lambda, mu / rho);
   };
 
   /// Linear operator A in linear constraint
-  LinearOperator<VectorXd, VectorXd> Aop = [](const VectorXd &x) { return x; };
+  LinearOperator<Vector, Vector> Aop = [](const Vector &x) { return x; };
 
   /// Linear operator B in linear constraint
-  LinearOperator<VectorXd, VectorXd> Bop = [](const VectorXd &y) { return -y; };
+  LinearOperator<Vector, Vector> Bop = [](const Vector &y) { return -y; };
 
   /// Inner product
-  Optimization::Convex::InnerProduct<VectorXd> inner_product =
-      [](const VectorXd &x, const VectorXd &y) -> double { return x.dot(y); };
+  Optimization::Convex::InnerProduct<Vector> inner_product =
+      [](const Vector &x, const Vector &y) -> double { return x.dot(y); };
 
   // All-0's vector of dimension n
-  VectorXd Z = VectorXd::Zero(n);
+  Vector Z = Vector::Zero(n);
 
   /// RUN ADMM!
-  auto result = ADMM<VectorXd>(minLx, minLy, Aop, Bop, Aop, inner_product, Z, Z,
-                               Z, params);
+  auto result = ADMM<Vector, Scalar>(minLx, minLy, Aop, Bop, Aop, inner_product,
+                                     Z, Z, Z, params);
 
   /// PROCESS OUTPUT
 
   /// Compute minimum-norm subgradient of final solution
-  VectorXd &xopt = std::get<0>(result.x);
+  Vector &xopt = std::get<0>(result.x);
 
   // First, compute gradient of smooth part
-  VectorXd subgrad = A.transpose() * (A * xopt - b);
+  Vector subgrad = A.transpose() * (A * xopt - b);
 
-  for (unsigned int i = 0; i < subgrad.rows(); ++i) {
+  for (size_t i = 0; i < subgrad.rows(); ++i) {
     if (fabs(xopt(i)) < 1e-4) {
       // If xopt_i ~ 0, pick a value from the range [-mu, mu] that will
       // minimize the absolute value of the resulting element in the subgradient
@@ -214,7 +217,7 @@ int main() {
   if (write_output) {
     // Define a lambda function that computes the objective of the LASSO
     // problem
-    auto f = [&](const VectorXd &x) {
+    auto f = [&](const Vector &x) {
       return .5 * (A * x - b).squaredNorm() + mu * x.lpNorm<1>();
     };
 
