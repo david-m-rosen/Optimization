@@ -23,9 +23,14 @@ find_package(Threads REQUIRED)
 # UNIT TESTS
 set(TEST_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/gtest_main.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp)
+        ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/GradientDescent_unit_test.cpp)
+
 add_executable(TNT_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp)
 target_link_libraries(TNT_unit_test Optimization ${GTEST_BOTH_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(GradientDescent_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/GradientDescent_unit_test.cpp)
+target_link_libraries(GradientDescent_unit_test Optimization ${GTEST_BOTH_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(gtest_main  ${TEST_SRCS})
 target_link_libraries(gtest_main Optimization ${GTEST_BOTH_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})

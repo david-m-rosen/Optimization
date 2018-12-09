@@ -17,13 +17,16 @@ typedef Eigen::DiagonalMatrix<Scalar, Eigen::Dynamic> DiagonalMatrix;
 
 // Threshold for considering two values to be numerically equal in the following
 // tests
-Scalar test_error_threshold = 1e-6;
+Scalar TNT_test_error_threshold = 1e-6;
 
 // Dimensions of small and large tests problems
 constexpr size_t small_dim = 3;
 constexpr size_t large_dim = 1000;
 
-class TNTUnitTest : public testing::Test {
+/// Test fixture for testing the Steihaug-Toint preconditioned conjugate
+/// gradient solver used to (approximately) solve the trust-region subproblem at
+/// each iteration of the truncated-Newton trust-region optimization method
+class STPCGUnitTest : public testing::Test {
 protected:
   /// Set up variables and functions used in the following tests
 
@@ -145,7 +148,7 @@ protected:
 /// Tests for the Steihaug-Toint truncated preconditioned conjugate gradient
 /// method
 
-TEST_F(TNTUnitTest, ExactSTPCG) {
+TEST_F(STPCGUnitTest, ExactSTPCG) {
 
   /// First, run the conjugate gradient method with a small PD matrix
   /// and an *exact* stopping criterion and an infinite trust region radius, to
@@ -158,13 +161,13 @@ TEST_F(TNTUnitTest, ExactSTPCG) {
   Scalar error = (V + small_P.inverse() * small_g).norm();
 
   // Check the solution
-  EXPECT_NEAR(error, 0, test_error_threshold);
+  EXPECT_NEAR(error, 0, TNT_test_error_threshold);
 
   // Check that the reported update step norm is correct
-  EXPECT_NEAR(update_step_norm, V.norm(), test_error_threshold);
+  EXPECT_NEAR(update_step_norm, V.norm(), TNT_test_error_threshold);
 }
 
-TEST_F(TNTUnitTest, STPCGwithNegativeCurvature) {
+TEST_F(STPCGUnitTest, STPCGwithNegativeCurvature) {
 
   /// Test STPCG with small negative-definite diagonal Hessian to ensure that
   /// the step to the boundary of the trust-region is computed properly
@@ -180,11 +183,12 @@ TEST_F(TNTUnitTest, STPCGwithNegativeCurvature) {
   Tangent target_solution = -(Delta / small_g.norm()) * small_g;
   Scalar error = (target_solution - V).norm();
 
-  EXPECT_NEAR(error, 0, test_error_threshold);
-  EXPECT_NEAR(update_step_norm, target_solution.norm(), test_error_threshold);
+  EXPECT_NEAR(error, 0, TNT_test_error_threshold);
+  EXPECT_NEAR(update_step_norm, target_solution.norm(),
+              TNT_test_error_threshold);
 }
 
-TEST_F(TNTUnitTest, STPCGwithPreconditioning) {
+TEST_F(STPCGUnitTest, STPCGwithPreconditioning) {
 
   /// Now test using a positive-definite Hessian and a (nontrivial)
   /// positive-definite preconditioning operator
@@ -199,11 +203,11 @@ TEST_F(TNTUnitTest, STPCGwithPreconditioning) {
   // Error in norm estimate under the M-norm: sqrt(v' * M * v)
   Scalar v_M_norm = std::sqrt(v.dot(small_M * v));
 
-  EXPECT_NEAR(error, 0, test_error_threshold);
-  EXPECT_NEAR(update_step_norm, v_M_norm, test_error_threshold);
+  EXPECT_NEAR(error, 0, TNT_test_error_threshold);
+  EXPECT_NEAR(update_step_norm, v_M_norm, TNT_test_error_threshold);
 }
 
-TEST_F(TNTUnitTest, STPCGwithNegativeCurvatureAndPreconditioning) {
+TEST_F(STPCGUnitTest, STPCGwithNegativeCurvatureAndPreconditioning) {
 
   /// Test with a negative-definite Hessian and positive-definite
   /// preconditioning operator
@@ -220,11 +224,11 @@ TEST_F(TNTUnitTest, STPCGwithNegativeCurvatureAndPreconditioning) {
   Scalar error = (V - p_scaled).norm();
   Scalar norm_error = fabs(update_step_norm - std::sqrt(V.dot(small_M * V)));
 
-  EXPECT_NEAR(error, 0, test_error_threshold);
-  EXPECT_NEAR(norm_error, 0, test_error_threshold);
+  EXPECT_NEAR(error, 0, TNT_test_error_threshold);
+  EXPECT_NEAR(norm_error, 0, TNT_test_error_threshold);
 }
 
-TEST_F(TNTUnitTest, SmallSTPCGwithTruncation) {
+TEST_F(STPCGUnitTest, SmallSTPCGwithTruncation) {
 
   /// Test STPCG with a small positive-definite Hessian and truncation
 
@@ -244,10 +248,10 @@ TEST_F(TNTUnitTest, SmallSTPCGwithTruncation) {
   Scalar V_truncated_norm_error = fabs(update_step_norm - V_truncated.norm());
 
   EXPECT_LE(truncate_grad_norm_relative_error, kappa_fgr);
-  EXPECT_NEAR(V_truncated_norm_error, 0, test_error_threshold);
+  EXPECT_NEAR(V_truncated_norm_error, 0, TNT_test_error_threshold);
 }
 
-TEST_F(TNTUnitTest, LargeSTPCGwithTruncation) {
+TEST_F(STPCGUnitTest, LargeSTPCGwithTruncation) {
 
   /// Test STPCG with a large positive-definite Hessian and truncation
 
@@ -262,10 +266,10 @@ TEST_F(TNTUnitTest, LargeSTPCGwithTruncation) {
   Scalar V_truncated_norm_error = fabs(update_step_norm - V_truncated.norm());
 
   EXPECT_LE(truncate_grad_norm_relative_error, kappa_fgr);
-  EXPECT_NEAR(V_truncated_norm_error, 0, test_error_threshold);
+  EXPECT_NEAR(V_truncated_norm_error, 0, TNT_test_error_threshold);
 }
 
-TEST_F(TNTUnitTest, SmallSTPCGwithPreconditioningAndTruncation) {
+TEST_F(STPCGUnitTest, SmallSTPCGwithPreconditioningAndTruncation) {
 
   /// Test preconditioned STPCG with a small positive-definite Hessian and
   /// truncation
@@ -283,10 +287,10 @@ TEST_F(TNTUnitTest, SmallSTPCGwithPreconditioningAndTruncation) {
   Scalar V_truncated_norm_error = fabs(update_step_norm - V_truncated_M_norm);
 
   EXPECT_LE(truncate_grad_norm_relative_error, kappa_fgr);
-  EXPECT_NEAR(V_truncated_norm_error, 0, test_error_threshold);
+  EXPECT_NEAR(V_truncated_norm_error, 0, TNT_test_error_threshold);
 }
 
-TEST_F(TNTUnitTest, LargeSTPCGwithPreconditioningAndTruncation) {
+TEST_F(STPCGUnitTest, LargeSTPCGwithPreconditioningAndTruncation) {
 
   /// Test preconditioned STPCG with a large positive-definite Hessian and
   /// truncation
@@ -304,10 +308,12 @@ TEST_F(TNTUnitTest, LargeSTPCGwithPreconditioningAndTruncation) {
   Scalar V_truncated_norm_error = fabs(update_step_norm - V_truncated_M_norm);
 
   EXPECT_LE(truncate_grad_norm_relative_error, kappa_fgr);
-  EXPECT_NEAR(V_truncated_norm_error, 0, test_error_threshold);
+  EXPECT_NEAR(V_truncated_norm_error, 0, TNT_test_error_threshold);
 }
 
-TEST_F(TNTUnitTest, EuclideanTNTRosenbrock) {
+/// Test cases for the end-to-end truncated-Newton trust-region algorithm
+
+TEST(TNTUnitTest, EuclideanTNTRosenbrock) {
   /// Test minimization of the Rosenbrock function
   ///
   /// f(x,y) = (a - x)^2 + b(y - x^2)^2
@@ -359,12 +365,12 @@ TEST_F(TNTUnitTest, EuclideanTNTRosenbrock) {
         return Hess;
       };
 
-  /// SAMPLE INITIAL POINT
+  /// Sample intial point
 
   Vector x0(.1, .1);
   Vector x_min(a, a * a);
 
-  /// RUN TNT OPTIMIZER!
+  /// Run TNT optimizer
 
   // Set TNT options
   Optimization::Smooth::TNTParams<Scalar> tnt_params;
@@ -375,16 +381,16 @@ TEST_F(TNTUnitTest, EuclideanTNTRosenbrock) {
           F, nabla_F, HC, x0, std::experimental::nullopt, tnt_params);
 
   // Check function value
-  EXPECT_NEAR(result.f, 0, test_error_threshold);
+  EXPECT_NEAR(result.f, 0, TNT_test_error_threshold);
 
   // Check gradient value
-  EXPECT_NEAR(result.grad_f_x_norm, 0, test_error_threshold);
+  EXPECT_NEAR(result.grad_f_x_norm, 0, TNT_test_error_threshold);
 
   // Check final solution
-  EXPECT_NEAR((result.x - x_min).norm(), 0, test_error_threshold);
+  EXPECT_NEAR((result.x - x_min).norm(), 0, TNT_test_error_threshold);
 }
 
-TEST_F(TNTUnitTest, RiemannianTNTSphere) {
+TEST(TNTUnitTest, RiemannianTNTSphere) {
   ///  We will minimize the function f(X; P) := | X - P |^2, where P in S^2 is
   ///  a fixed point on the sphere
   ///
@@ -397,7 +403,7 @@ TEST_F(TNTUnitTest, RiemannianTNTSphere) {
 
   Vector P = {0.0, 0.0, 1.0}; // P is the north pole
 
-  /// SET UP FUNCTION HANDLES
+  /// Set up function handles
 
   /// Utility function: projection of the vector V \in R^3 onto the tangent
   /// space T_X(S^2) of S^2 at the point
@@ -448,11 +454,12 @@ TEST_F(TNTUnitTest, RiemannianTNTSphere) {
         return (X + V).normalized();
       };
 
-  /// SET INITIAL POINT
+  /// Set initial point
 
   // X0 will be a point on the equator
   Vector X0 = {-0.5, -0.5, -0.707107};
 
+  /// Run TNT optimizer
   // Set TNT options
   Optimization::Smooth::TNTParams<Scalar> tnt_params;
   tnt_params.stepsize_tolerance = 0;
@@ -462,7 +469,7 @@ TEST_F(TNTUnitTest, RiemannianTNTSphere) {
           F, grad_F, HC, metric, retract, X0, P, std::experimental::nullopt,
           tnt_params);
 
-  EXPECT_NEAR(result.f, 0, test_error_threshold);
-  EXPECT_NEAR(result.grad_f_x_norm, 0, test_error_threshold);
-  EXPECT_NEAR((result.x - P).norm(), 0, test_error_threshold);
+  EXPECT_NEAR(result.f, 0, TNT_test_error_threshold);
+  EXPECT_NEAR(result.grad_f_x_norm, 0, TNT_test_error_threshold);
+  EXPECT_NEAR((result.x - P).norm(), 0, TNT_test_error_threshold);
 }
