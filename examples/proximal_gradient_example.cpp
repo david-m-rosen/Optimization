@@ -9,18 +9,19 @@ using namespace Optimization::Convex;
 int main() {
   /// SET UP TEST FUNCTION HANDLES
 
-  /**  Let's start by solving a group-sparse lasso problem of the form
+  /** We solve a group-sparse lasso problem of the form
    *
-   * min || A *  x - b ||^2 + mu * || x ||_2
+   * min || A *  x - b ||_2^2 + mu * || x ||_2
    *
    */
 
-  typedef float Scalar;
-  typedef Eigen::VectorXd Variable;
-  Eigen::Matrix2d A;
+  typedef double Scalar;
+  typedef Eigen::Matrix<Scalar, 2, 1> Variable;
+  Eigen::Matrix<Scalar, 2, 2> A;
   A << 1000, 0, 0, 1.0;
-  Variable b = Eigen::Vector2d(1, 1);
-  Scalar mu = 100;
+  Variable b;
+  b << 1.0, 1.0;
+  Scalar mu = 10;
 
   InnerProduct<Variable, Scalar> inner_product =
       [&](const Variable &v1, const Variable &v2) { return v1.dot(v2); };
@@ -49,17 +50,16 @@ int main() {
      * (cf. Section 6.5.4 of Parikh and Boyd's "Proximal Algorithms"
      */
 
-    return max(1 - mu * lambda / sqrt(x.dot(x)), 0.0) * x;
+    return std::max<Scalar>(1 - mu * lambda / std::sqrt(x.dot(x)), 0.0) * x;
   };
 
   /// INITIALIZATION
-  Variable x0(2);
-  x0(0) = 4;
-  x0(1) = 4;
+  Variable x0;
+  x0 << 4.0, 4.0;
 
   cout << "Solving group LASSO problem: " << endl
        << endl
-       << "min | Ax - b |^2 + mu * |x|" << endl
+       << "min |Ax - b|_2^2 + mu * |x|_2" << endl
        << endl
        << "with A = " << endl
        << A << endl

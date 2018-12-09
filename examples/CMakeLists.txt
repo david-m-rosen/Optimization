@@ -22,7 +22,7 @@ add_executable(Euclidean_optimization_example ${CMAKE_CURRENT_SOURCE_DIR}/Euclid
 target_link_libraries(Euclidean_optimization_example Optimization)
 
 # Build a minimal working example to demonstrate the proximal gradient method on a group-sparse lasso problem
-add_executable(proximal_gradient_example ${CMAKE_CURRENT_SOURCE_DIR}/ProximalGradientTest.cpp)
+add_executable(proximal_gradient_example ${CMAKE_CURRENT_SOURCE_DIR}/proximal_gradient_example.cpp)
 target_link_libraries(proximal_gradient_example Optimization)
 
 # Build a minimal working example to demonstrate the use of the ADMM algorithm
