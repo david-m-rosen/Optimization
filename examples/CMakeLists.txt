@@ -14,27 +14,20 @@ include_directories(${EIGEN3_INCLUDE_DIR})
 # EXAMPLE EXECUTABLES
 
 # Build a minimal working example to demonstrate truncated-Newton trust-region optimization over the sphere S2
-add_executable(Riemannian_optimization_example EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/Riemannian_optimization_example.cpp)
+add_executable(Riemannian_optimization_example ${CMAKE_CURRENT_SOURCE_DIR}/Riemannian_optimization_example.cpp)
 target_link_libraries(Riemannian_optimization_example Optimization)
 
 # Build a minimal working example to demonstrate the use of the simplified Euclidean truncated-Newton trust-region interface to minimize the McCormick function
-add_executable(Euclidean_optimization_example EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/Euclidean_optimization_example.cpp)
+add_executable(Euclidean_optimization_example ${CMAKE_CURRENT_SOURCE_DIR}/Euclidean_optimization_example.cpp)
 target_link_libraries(Euclidean_optimization_example Optimization)
 
 # Build a minimal working example to demonstrate the proximal gradient method on a group-sparse lasso problem
-add_executable(proximal_gradient_example EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/ProximalGradientTest.cpp)
+add_executable(proximal_gradient_example ${CMAKE_CURRENT_SOURCE_DIR}/ProximalGradientTest.cpp)
 target_link_libraries(proximal_gradient_example Optimization)
 
 # Build a minimal working example to demonstrate the use of the ADMM algorithm
-add_executable(ADMM_example EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/ADMM_example.cpp)
+add_executable(ADMM_example ${CMAKE_CURRENT_SOURCE_DIR}/ADMM_example.cpp)
 target_link_libraries(ADMM_example Optimization)
-
-# Add these to a custom target named $EXAMPLES_TARGET_NAME in the generated Makefile
-add_custom_target(${EXAMPLES_TARGET_NAME})
-add_dependencies(${EXAMPLES_TARGET_NAME} Euclidean_optimization_example Riemannian_optimization_example proximal_gradient_example ADMM_example)
-
-
-
 
 
 

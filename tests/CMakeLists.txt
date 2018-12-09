@@ -20,18 +20,16 @@ include_directories(${GTEST_INCLUDE_DIRS})
 find_package(Threads REQUIRED)
 
 
-
 # UNIT TESTS
-add_executable(TNT_unit_test EXCLUDE_FROM_ALL ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp)
+set(TEST_SRCS
+        ${CMAKE_CURRENT_SOURCE_DIR}/gtest_main.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp)
+add_executable(TNT_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp)
 target_link_libraries(TNT_unit_test Optimization ${GTEST_BOTH_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
-gtest_discover_tests(TNT_unit_test)
 
-
-# Add these to a custom target named $EXAMPLES_TARGET_NAME in the generated Makefile
-add_custom_target(${TESTS_TARGET_NAME})
-add_dependencies(${TESTS_TARGET_NAME} TNT_unit_test)
-
-
+add_executable(gtest_main  ${TEST_SRCS})
+target_link_libraries(gtest_main Optimization ${GTEST_BOTH_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+gtest_discover_tests(gtest_main)
 
 
 
