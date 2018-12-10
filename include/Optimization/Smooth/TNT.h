@@ -9,7 +9,10 @@
  *
  * "Trust-Region Methods on Riemannian Manifolds" by Absil, Baker and Gallivan
  *
- * Copyright (C) 2017 by David M. Rosen (drosen2000@gmail.com)
+ * "Optimization Algorithms on Matrix Manifolds" by Absil, Mahoney, and
+ *  Sepulchre
+ *
+ * Copyright (C) 2017-2018 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once
@@ -327,11 +330,47 @@ struct TNTResult : public SmoothOptimizerResult<Variable, Scalar> {
   std::vector<Scalar> trust_region_radius;
 };
 
-/** This function implements a truncated-Newton trust-region method, using the
- * Steihaug-Toint preconditioned truncated conjugate-gradient method as the
- * inner (approximate) linear system solver; this implementation follows the
- * one given as Algorithm 6.1.1 of "Trust-Region Methods", generalized to the
- * setting of a generic Riemannian manifold */
+/** This function implements a Riemannian truncated-Newton trust-region method,
+ * using the Steihaug-Toint preconditioned truncated conjugate-gradient method
+ * as the inner (approximate) trust-region subproblem solver. This
+ * implementation follows the one given as Algorithm 6.1.1 of "Trust-Region
+ * Methods", generalized to the setting of a generic Riemannian manifold (see
+ * also the paper "Trust-Region Methods on Riemannian Manifolds" by P.-A. Absil,
+ * C.G. Baker, and K.A. Gallivan, and/or "Optimization Algorithms on Matrix
+ * Manifolds" by P.-A. Absil, R. Mahoney, and R. Sepulchre).
+ *
+ * Here:
+ *
+ * - f is the objective function to be minimized.
+ *
+ * - QM is a function that constructs a quadratic model for the objective f on
+ *   the tangent space of the manifold M at X. Concretely, this is a
+ *   std::function having the signature:
+ *
+ *   void QM(const Variable &X, Tangent &gradient, LinearOperator<Variable,
+ *        Tangent, Args...> &Hessian, Args &... args)>;
+ *
+ *   this function sets the argument 'gradient' to the Riemannian gradient
+ *   grad f(X) of f at X, and the argument 'Hessian' to the Riemanninan Hessian
+ *   Hess f(X) of f at X (recall that this is a linear operator
+ *   Hess f(X) : T_X(M) -> T_X(M) on the tangent space T_X(M) of M at X that
+ *   maps each tangent vector V to the covariant derivative of the gradient
+ *   vector field grad f(X) along V at X; cf. Secs. 3.6 and 5.5 of
+ *   "Optimization Methods on Matrix Manifolds").
+ *
+ * - metric is the Riemannian metric for M (a smooth assignment of an inner
+ *   product to each of M's tangent spaces, cf. Sec. 3.6 of "Optimization
+ *   Methods on Matrix Manifolds").
+ *
+ * - retract is a retraction operator: this is a function taking as input a
+ *   point X in M and a tangent vector V in the tangent space T_X(M) of M at X,
+ *   and returns a new point Y in M that is (intuitively) gotten by 'moving
+ *   along V from X' (cf. Sec. 4.1 of "Optimization Methods on Riemannian
+ *   Manifolds" for a precise definition).
+ *
+ * - x0 (in M) is the initialization point for the Riemannian truncated-Newton
+ *   trust-region algorithm.
+ */
 template <typename Variable, typename Tangent, typename Scalar = double,
           typename... Args>
 TNTResult<Variable, Scalar>
@@ -656,9 +695,19 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
   return result;
 }
 
-/** Syntactic sugar: enables the user to supply separate functions that return
- * the Riemannian gradient and Hessian operator at X, rather than a single
- * QuadraticModel function */
+/** Syntactic sugar for the above Riemannian TNT function: this interface
+ * enables the user to supply separate functions that return the Riemannian
+ * gradient and Hessian operator at X, rather than a single QuadraticModel
+ * function.  Here:
+ *
+ * - gradF is a function that accepts as input a point X in M, and returns
+ *   grad f(X), the Riemannian gradient of f at X.
+ *
+ * - HC is a function that accepts as input a point X in M, and returns
+ *   Hess f(X), the linear operator Hess f(X) : T_X(M) -> T_X(M) on the tangent
+ *   space T_X(M) of M at X that assigns to each tangent vector V the covariant
+ *   derivative of the gradient vector field grad f(X) along V.
+ */
 template <typename Variable, typename Tangent, typename Scalar = double,
           typename... Args>
 TNTResult<Variable, Scalar>
@@ -694,8 +743,20 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
       f, QM, metric, retract, x0, args..., precon, params, user_function);
 }
 
-/** This next function provides a convenient specialization of the TNT
- * interface for the (common) use case of optimization over Euclidean spaces */
+/** These next functions provide a convenient specialization/simplification of
+ * the Riemannian TNT interface for the (common) use case of optimization over
+ * Euclidean spaces.  These functions make the following assumptions:
+ *
+ * - The metric is the standard Euclidean metric:  g(X, V1, V2) := <V1, V2> for
+ *   all X in M
+ *
+ * - The retraction is the standard Euclidean retraction:  R_X(V) := X + V for
+ *   all X in M.
+ *
+ * - We exploit the global parallelism and self-duality of Euclidean spaces to
+ *   represent both *points* X in Euclidean space and *tangent vectors* V using
+ *   the *same* data type (Vector).
+ */
 
 template <typename Vector, typename Scalar = double, typename... Args>
 using EuclideanTNTUserFunction =

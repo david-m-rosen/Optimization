@@ -96,6 +96,32 @@ struct GradientDescentResult : public SmoothOptimizerResult<Variable, Scalar> {
   std::vector<size_t> linesearch_iterations;
 };
 
+/** This function implements gradient descent on a general Riemannian manifold
+ * (cf. Algorithm 1 in Sec. 4.2 of "Optimization Algorithms on Matrix
+ * Manifolds", by P.-A. Absil, R. Mahoney, and R. Sepulchre".
+ *
+ * Here:
+ *
+ * - f is the objective function to be minimized.
+ *
+ * - gradF is a function that accepts as input a point X in M, and returns
+ *   grad f(X), the Riemannian gradient of f at X (cf. Sec. 3.6 of "Optimization
+ *   Algorithms on Matrix Manifolds").
+ *
+ * - metric is the Riemannian metric for M (a smooth assignment of an inner
+ *   product to each of M's tangent spaces, cf. Sec. 3.6 of "Optimization
+ *   Methods on Matrix Manifolds").
+ *
+ * - retract is a retraction operator: this is a function taking as input a
+ *   point X in M and a tangent vector V in the tangent space T_X(M) of M at X,
+ *   and returns a new point Y in M that is (intuitively) gotten by 'moving
+ *   along V from X' (cf. Sec. 4.1 of "Optimization Methods on Riemannian
+ *   Manifolds" for a precise definition).
+ *
+ * - x0 (in M) is the initialization point for the Riemannian gradient descent
+ *   algorithm.
+ */
+
 template <typename Variable, typename Tangent, typename Scalar = double,
           typename... Args>
 GradientDescentResult<Variable, Scalar> GradientDescent(
@@ -346,9 +372,21 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
   return result;
 }
 
-/** This next function provides a convenient specialization of the gradient
- * descent interface for the (common) use case of optimization over Euclidean
- * spaces */
+/** The next function provides a convenient specialization/simplification of
+ * the Riemannian gradient descent interface for the (common) use case of
+ * optimization over Euclidean spaces.  This function makes the following
+ * assumptions:
+ *
+ * - The metric is the standard Euclidean metric:  g(X, V1, V2) := <V1, V2> for
+ *   all X in M
+ *
+ * - The retraction is the standard Euclidean retraction:  R_X(V) := X + V for
+ *   all X in M.
+ *
+ * - We exploit the global parallelism and self-duality of Euclidean spaces to
+ *   represent both *points* X in Euclidean space and *tangent vectors* V using
+ *   the *same* data type (Vector).
+ */
 
 template <typename Vector, typename Scalar = double, typename... Args>
 using EuclideanGradientDescentUserFunction =

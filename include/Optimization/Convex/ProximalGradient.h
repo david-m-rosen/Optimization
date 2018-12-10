@@ -7,7 +7,7 @@
  * implementation is based upon the algorithm described in Section 4.2 of Parikh
  * and Boyd's monograph "Proximal Algorithms".
  *
- * Copyright (C) 2017 by David M. Rosen (drosen2000@gmail.com)
+ * Copyright (C) 2017-2018 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once
@@ -121,6 +121,30 @@ struct ProximalGradientResult : OptimizerResult<Variable, Scalar> {
   // Relative norm of the composite gradient G_t at the *END* of each iteration
   std::vector<Scalar> relative_composite_gradient_norms;
 };
+
+/** This function implements the proximal gradient method for minimizing the sum
+ *
+ * h(x) := f(x) + g(x)
+ *
+ * of two closed proper convex functions, where f(x) is additionally assumed to
+ * be differentiable (cf. Sec. 4.2 of "Proximal Algorithms", by N. Parikh and S.
+ * Boyd).  Here:
+ *
+ * - f and g are the two terms in the objective, whose sum is to be minimized.
+ *
+ * - grad_f is a function that returns the gradient of f at x.
+ *
+ * - prox_g(x,lambda) is the proximal operator for g; this is the function
+ *   mapping x and lambda to the (unique) minimizer of (cf. Sec. 1.1 of
+ *   "Proximal Algorithms by N. Parikh and S. Boyd):
+ *
+ *   argmin_v [ g(v) + (1 / (2*lambda)) ||x - v||_^2 ].
+ *
+ * - inner_product is the standard (Euclidean) inner product for the 'Variable'
+ *   type.
+ *
+ * - x0 is the initialization point for the proximal gradient algorithm.
+ */
 
 template <typename Variable, typename Scalar = double, typename... Args>
 ProximalGradientResult<Variable, Scalar>
