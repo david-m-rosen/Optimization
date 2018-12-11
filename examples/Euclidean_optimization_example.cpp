@@ -45,7 +45,7 @@ int main() {
   // Euclidean Hessian constructor: Returns the Hessian operator H(X) at X
   // H(X) = [2 - 4by + 12bx^2   -4bx
   //      -4bx               2b]
-  EuclideanHessianConstructor<Vector> HC = [a, b](const Vector &x) {
+  EuclideanLinearOperatorConstructor<Vector> HC = [a, b](const Vector &x) {
     // Compute Euclidean Hessian at X
     Matrix H;
     H(0, 0) = 2 - 4 * b * x(1) + 12 * b * std::pow(x(0), 2);

@@ -347,7 +347,7 @@ TEST(TNTUnitTest, EuclideanTNTRosenbrock) {
   // Euclidean Hessian constructor: Returns the Hessian operator H(X) at X
   // H(X) = [2 - 4by + 12bx^2   -4bx
   //      -4bx               2b]
-  Optimization::Smooth::EuclideanHessianConstructor<Vector> HC =
+  Optimization::Smooth::EuclideanLinearOperatorConstructor<Vector> HC =
       [a, b](const Vector &x) {
         // Compute Euclidean Hessian at X
         Matrix H;
@@ -427,7 +427,7 @@ TEST(TNTUnitTest, RiemannianTNTSphere) {
 
   /// Riemannian Hessian constructor: Returns the Riemannian Hessian operator
   /// H(X): T_X(S^2) -> T_X(S^2) at X
-  Optimization::Smooth::HessianConstructor<Vector, Vector, Vector> HC =
+  Optimization::Smooth::LinearOperatorConstructor<Vector, Vector, Vector> HC =
       [&project, &grad_F](const Vector &X, Vector &P) {
         // Euclidean Hessian matrix
         Matrix EucHess = 2 * Matrix::Identity();

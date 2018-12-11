@@ -712,8 +712,9 @@ template <typename Variable, typename Tangent, typename Scalar = double,
           typename... Args>
 TNTResult<Variable, Scalar>
 TNT(const Objective<Variable, Scalar, Args...> &f,
-    const VectorField<Variable, Tangent, Args...> &gradF,
-    const HessianConstructor<Variable, Tangent, Args...> &HC,
+    const VectorField<Variable, Tangent, Args...> &grad_f,
+    const LinearOperatorConstructor<Variable, Tangent, Args...>
+        &HessianConstructor,
     const RiemannianMetric<Variable, Tangent, Scalar, Args...> &metric,
     const Retraction<Variable, Tangent, Args...> &retract, const Variable &x0,
     Args &... args,
@@ -728,14 +729,14 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
   // Construct a QuadraticModel function from the passed VectorField and
   // HessianConstructor functions
   QuadraticModel<Variable, Tangent, Args...> QM =
-      [&gradF, &HC](const Variable &X, Tangent &g,
-                    LinearOperator<Variable, Tangent, Args...> &H,
-                    Args &... args) {
+      [&grad_f, &HessianConstructor](
+          const Variable &X, Tangent &grad,
+          LinearOperator<Variable, Tangent, Args...> &Hess, Args &... args) {
         // Set gradient
-        g = gradF(X, args...);
+        grad = grad_f(X, args...);
 
         // Set Hessian operator
-        H = HC(X, args...);
+        Hess = HessianConstructor(X, args...);
       };
 
   // Now call TNT using this QuadraticModel function
@@ -787,9 +788,10 @@ TNTResult<Vector, Scalar> EuclideanTNT(
 template <typename Vector, typename Scalar = double, typename... Args>
 TNTResult<Vector, Scalar> EuclideanTNT(
     const Objective<Vector, Scalar, Args...> &f,
-    const EuclideanVectorField<Vector, Args...> &nablaF,
-    const EuclideanHessianConstructor<Vector, Args...> &HC, const Vector &x0,
-    Args &... args,
+    const EuclideanVectorField<Vector, Args...> &nabla_f,
+    const EuclideanLinearOperatorConstructor<Vector, Args...>
+        &HessianConstructor,
+    const Vector &x0, Args &... args,
     const std::experimental::optional<EuclideanLinearOperator<Vector, Args...>>
         &precon = std::experimental::nullopt,
     const TNTParams<Scalar> &params = TNTParams<Scalar>(),
@@ -797,17 +799,15 @@ TNTResult<Vector, Scalar> EuclideanTNT(
         EuclideanTNTUserFunction<Vector, Scalar, Args...>> &user_function =
         std::experimental::nullopt) {
 
-  // Construct a EuclideanQuadraticModel function from the passed
-  // EuclieanVectorField and EuclideanHessianConstructor functions
   EuclideanQuadraticModel<Vector, Args...> QM =
-      [&nablaF, &HC](const Vector &X, Vector &g,
-                     EuclideanLinearOperator<Vector, Args...> &H,
-                     Args &... args) {
+      [&nabla_f, &HessianConstructor](
+          const Vector &X, Vector &grad,
+          EuclideanLinearOperator<Vector, Args...> &Hess, Args &... args) {
         // Set gradient
-        g = nablaF(X, args...);
+        grad = nabla_f(X, args...);
 
         // Set Hessian operator
-        H = HC(X, args...);
+        Hess = HessianConstructor(X, args...);
       };
 
   // Now call EuclideanTNT using this QuadraticModel function

@@ -55,7 +55,7 @@ int main() {
 
   /// Riemannian Hessian constructor: Returns the Riemannian Hessian operator
   /// H(X): T_X(S^2) -> T_X(S^2) at X
-  HessianConstructor<Vector, Vector, Vector> HC =
+  LinearOperatorConstructor<Vector, Vector, Vector> HC =
       [&project, &grad_F](const Vector &X, Vector &P) {
         // Euclidean Hessian matrix
         Matrix EucHess = 2 * Matrix::Identity();

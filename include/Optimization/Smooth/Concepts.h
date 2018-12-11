@@ -48,10 +48,10 @@ template <typename Variable, typename Tangent, typename... Args>
 using LinearOperator =
     std::function<Tangent(const Variable &X, const Tangent &V, Args &... args)>;
 
-/** An alias template for a function that constructs the Hessian operator
- * Hess F : T_X(M) -> T_X(M) on the tangent space of a manifold M at X */
+/** An alias template for a function that constructs a linear operator
+ * A : T_X(M) -> T_X(M) on the tangent space of a manifold M at X */
 template <typename Variable, typename Tangent, typename... Args>
-using HessianConstructor =
+using LinearOperatorConstructor =
     std::function<LinearOperator<Variable, Tangent, Args...>(const Variable &X,
                                                              Args &... args)>;
 
@@ -132,9 +132,8 @@ template <typename Vector, typename... Args>
 using EuclideanLinearOperator = LinearOperator<Vector, Vector, Args...>;
 
 template <typename Vector, typename... Args>
-using EuclideanHessianConstructor =
-    std::function<LinearOperator<Vector, Vector, Args...>(const Vector &X,
-                                                          Args &... args)>;
+using EuclideanLinearOperatorConstructor =
+    LinearOperatorConstructor<Vector, Vector, Args...>;
 
 template <typename Vector, typename... Args>
 using EuclideanQuadraticModel = QuadraticModel<Vector, Vector, Args...>;
