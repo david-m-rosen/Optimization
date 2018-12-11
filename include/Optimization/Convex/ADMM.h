@@ -14,7 +14,7 @@
  * Direction Optimization Methods", by T. Goldstein, B. O'Donoghue, S. Setzer,
  * and R. Baraniuk.
  *
- * Copyright (C) 2018 by David M. Rosen (drosen2000@gmail.com)
+ * Copyright (C) 2018 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once

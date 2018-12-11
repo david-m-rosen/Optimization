@@ -1,7 +1,7 @@
 /** This header provides a basic set of concepts that are common to all
  * numerical optimization methods.
  *
- * Copyright (C) 2017 by David M. Rosen (drosen2000@gmail.com)
+ * Copyright (C) 2017 - 2018 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once

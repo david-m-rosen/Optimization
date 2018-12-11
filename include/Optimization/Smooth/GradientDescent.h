@@ -1,7 +1,7 @@
 /** This header file provides a lightweight template function implementing
  * gradient descent on a Riemannian manifold.
  *
- * David M. Rosen (dmrosen@mit.edu)
+ * Copyright (C) 2017 - 2018 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once

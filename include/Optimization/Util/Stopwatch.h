@@ -1,8 +1,8 @@
 /** This small file provides a pair of convenience functions that are useful for
-* measuring elapsed computation times.
-*
-* Copyright (C) 2017 by David M. Rosen
-*/
+ * measuring elapsed computation times.
+ *
+ * Copyright (C) 2017 - 2018 by David M. Rosen (dmrosen@mit.edu)
+ */
 
 #pragma once
 
@@ -27,4 +27,4 @@ tock(const std::chrono::time_point<std::chrono::high_resolution_clock>
              .count() /
          1000.0;
 }
-}
+} // namespace Stopwatch
