@@ -17,9 +17,9 @@ endif()
 
 # BUILD CONFIGURATIONS
 # Build the examples?
-set(BUILD_EXAMPLES OFF CACHE BOOL "Build example executables? [disabled by default]")
+set(BUILD_OPTIMIZATION_EXAMPLES OFF CACHE BOOL "Build example executables? [disabled by default]")
 # Build the unit tests?
-set(BUILD_TESTS OFF CACHE BOOL "Build unit tests? [disabled by default]")
+set(BUILD_OPTIMIZATION_TESTS OFF CACHE BOOL "Build unit tests? [disabled by default]")
 # Enable faster instruction sets (SIMD/AVX)?
 set(ENABLE_FAST_INSTRUCTIONS ON CACHE BOOL "Enable faster instruction sets (SIMD/AVX)? [enabled by default]")
 
@@ -67,13 +67,13 @@ export(TARGETS ${PROJECT_NAME} FILE ${PROJECT_NAME}Config.cmake)
 # Define some additional (optional) named targets, not built by default.  Typically, these will be e.g. unit tests, example executables.
 
 # This is the name of the target in the generated Makefile that builds the example executables; i.e., to build these, one must type "make $EXAMPLES_TARGET_NAME" using the generated Makefile in order to build the example executables (we do this because we don't want these executables to be automatically built by other CMake projects that use this one as a dependency)
-if(${BUILD_EXAMPLES})
+if(${BUILD_OPTIMIZATION_EXAMPLES})
 message(STATUS "Adding examples to build")
 add_subdirectory(examples)
 endif()
 
 # This is the name of the target in the generated Makefile that builds the tests; i.e., to build these, one must type "make $TESTS_TARGET_NAME" using the generated Makefile in order to build the example executables (we do this because we don't want these executables to be automatically built by other CMake projects that use this one as a dependency)
-if(${BUILD_TESTS})
+if(${BUILD_OPTIMIZATION_TESTS})
 message(STATUS "Adding unit tests to build")
 add_subdirectory(tests)
 endif()
