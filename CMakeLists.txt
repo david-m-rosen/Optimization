@@ -20,8 +20,8 @@ endif()
 set(BUILD_OPTIMIZATION_EXAMPLES OFF CACHE BOOL "Build example executables? [disabled by default]")
 # Build the unit tests?
 set(BUILD_OPTIMIZATION_TESTS OFF CACHE BOOL "Build unit tests? [disabled by default]")
-# Enable faster instruction sets (SIMD/AVX)?
-set(ENABLE_FAST_INSTRUCTIONS ON CACHE BOOL "Enable faster instruction sets (SIMD/AVX)? [enabled by default]")
+# Enable faster instruction sets (SIMD/AVX)
+set(ENABLE_VECTORIZATION OFF CACHE BOOL "Enable vectorized instruction sets (SIMD/AVX)? [disabled by default]")
 
 message(STATUS "Processing CMakeLists for header-only library ${PROJECT_NAME}:\n")
 
