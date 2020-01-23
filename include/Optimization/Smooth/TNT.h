@@ -33,30 +33,37 @@ namespace Smooth {
 
 /** An alias template for a user-definable function that can be
  * used to access various interesting bits of information about the internal
- * state of a truncated-Newton optimization algorithm as it runs.  More
- * precisely, this function is called at the end of each major (outer)
- * iteration, and is provided access to the following quantities:
+ * state of a truncated-Newton optimization algorithm as it runs.  Here:
  *
- * i: index of current iteration
- * t: total elapsed computation time at the *start* of the current iteration
- * x: iterate at the *start* of the current iteration
- * f: objective value at x
- * g: Riemannian gradient at x
- * HessOp:  Hessian operator at x
- * Delta: trust-region radius at the *start* of the current iteration
- * num_STPCG_iters: number of iterations of the Steihaug-Toint preconditioned
- *                  conjugate-gradient method performed when computing the
- *                  trust-update step h
- * h:  the trust-region update step computed during this iteration
- * df: decrease in objective value obtained by applying the trust-region update
- * rho: value of the gain ratio for the proposed update step h
- * accepted:  Boolean value indicating whether the proposed trust-region update
- *            step h was accepted
+ * - i: index of current iteration
+ * - t: total elapsed computation time at the *start* of the current iteration
+ * - x: iterate at the *start* of the current iteration
+ * - f: objective value at x
+ * - g: Riemannian gradient at x
+ * - HessOp:  Hessian operator at x
+ * - Delta: trust-region radius at the *start* of the current iteration
+ * - num_STPCG_iters: number of iterations of the Steihaug-Toint preconditioned
+ *   conjugate-gradient method performed when computing the trust-update step h
+ * - h:  the trust-region update step computed during this iteration
+ * - df: decrease in objective value obtained by applying the trust-region
+ *   update
+ * - rho: value of the gain ratio for the proposed update step h
+ * - accepted:  Boolean value indicating whether the proposed trust-region
+ *   update step h was accepted
+ *
+ * This function is called at the end of each outer (major) iteration, after all
+ * of the above-referenced quantities have been computed, but *before* the
+ * update step h computed during this iteration is applied.
+ *
+ * This function may also return the Boolean value 'true' in order to terminate
+ * the truncated-Newton trust-region algorithm; this provides a convenient means
+ * of implementing a custom (user-definable) stopping criterion.
+ *
  */
 template <typename Variable, typename Tangent, typename Scalar = double,
           typename... Args>
 using TNTUserFunction =
-    std::function<void(size_t i, double t, const Variable &x, Scalar f,
+    std::function<bool(size_t i, double t, const Variable &x, Scalar f,
                        const Tangent &g,
                        const LinearOperator<Variable, Tangent, Args...> &HessOp,
                        Scalar Delta, size_t num_STPCG_iters, const Tangent &h,
@@ -297,7 +304,10 @@ enum class TNTStatus {
   ITERATION_LIMIT,
 
   /** The algorithm exhausted the allotted computation time */
-  ELAPSED_TIME
+  ELAPSED_TIME,
+
+  /** The algorithm terminated due to the user-supplied stopping criterion */
+  USER_FUNCTION
 };
 
 /** A useful struct used to hold the output of a truncated-Newton trust-region
@@ -572,10 +582,15 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     result.rho.push_back(rho);
 
     // Call the user-supplied function to provide access to internal algorithm
-    // state
-    if (user_function)
-      (*user_function)(iteration, elapsed_time, x, f_x, grad, Hess, Delta,
-                       inner_iterations, h, df, rho, step_accepted, args...);
+    // state, and check for user-requested termination
+    if (user_function) {
+      if ((*user_function)(iteration, elapsed_time, x, f_x, grad, Hess, Delta,
+                           inner_iterations, h, df, rho, step_accepted,
+                           args...)) {
+        result.status = TNTStatus::USER_FUNCTION;
+        break;
+      }
+    }
 
     /// Update cached values if the iterate is accepted
     if (step_accepted) {
@@ -680,6 +695,11 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
                 << result.elapsed_time << " > " << params.max_computation_time
                 << " seconds)" << std::endl;
       break;
+    case TNTStatus::USER_FUNCTION:
+      std::cout
+          << "Algorithm terminated due to user-supplied stopping criterion"
+          << std::endl;
+      break;
     }
 
     std::cout << "Final objective value: " << result.f << std::endl;
@@ -690,6 +710,10 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     std::cout << "Total elapsed computation time: " << result.elapsed_time
               << " seconds" << std::endl
               << std::endl;
+
+    // Reset std::cout output stream to default display parameters
+    std::cout << std::defaultfloat;
+    std::cout.precision(6);
   }
 
   return result;
