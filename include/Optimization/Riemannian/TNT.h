@@ -279,35 +279,35 @@ satisfy 0 < eta1 <= eta2) */
 enum class TNTStatus {
 
   /** The algorithm obtained a solution satisfying the gradient tolerance */
-  GRADIENT,
+  Gradient,
 
   /** The algorithm obtained a solution satisfying the preconditioned gradient
      tolerance */
-  PRECONDITIONED_GRADIENT,
+  PreconditionedGradient,
 
   /** The algorithm terminated because the relative decrease in function value
      obtained after the last accepted update was less than the specified
      tolerance */
-  RELATIVE_DECREASE,
+  RelativeDecrease,
 
   /** The algorithm terminated because the norm of the last accepted update
      step
      was less than the specified tolerance */
-  STEPSIZE,
+  Stepsize,
 
   /** The algorithm terminated because the trust-region radius decreased below
      the specified threshold */
-  TRUST_REGION,
+  TrustRegion,
 
   /** The algorithm exhausted the allotted number of major (outer) iterations
    */
-  ITERATION_LIMIT,
+  IterationLimit,
 
   /** The algorithm exhausted the allotted computation time */
-  ELAPSED_TIME,
+  ElapsedTime,
 
   /** The algorithm terminated due to the user-supplied stopping criterion */
-  USER_FUNCTION
+  UserFunction
 };
 
 /** A useful struct used to hold the output of a truncated-Newton trust-region
@@ -404,8 +404,8 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
   // Output struct
   TNTResult<Variable, Scalar> result;
   result.status =
-      TNTStatus::ITERATION_LIMIT; // "Default" stopping condition (i.e. will
-                                  // trigger if no other is)
+      TNTStatus::IterationLimit; // "Default" stopping condition (i.e. will
+                                 // trigger if no other is)
 
   // Current iterate and proposed next iterates;
   Variable x, x_proposed;
@@ -483,7 +483,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     double elapsed_time = Stopwatch::tock(start_time);
 
     if (elapsed_time > params.max_computation_time) {
-      result.status = TNTStatus::ELAPSED_TIME;
+      result.status = TNTStatus::ElapsedTime;
       break;
     }
 
@@ -509,12 +509,12 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
     // Test gradient-based stopping criterion
     if (grad_f_x_norm < params.gradient_tolerance) {
-      result.status = TNTStatus::GRADIENT;
+      result.status = TNTStatus::Gradient;
       break;
     }
     if (preconditioned_grad_f_x_norm <
         params.preconditioned_gradient_tolerance) {
-      result.status = TNTStatus::PRECONDITIONED_GRADIENT;
+      result.status = TNTStatus::PreconditionedGradient;
       break;
     }
 
@@ -587,7 +587,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
       if ((*user_function)(iteration, elapsed_time, x, f_x, grad, Hess, Delta,
                            inner_iterations, h, df, rho, step_accepted,
                            args...)) {
-        result.status = TNTStatus::USER_FUNCTION;
+        result.status = TNTStatus::UserFunction;
         break;
       }
     }
@@ -600,13 +600,13 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
       // Test relative decrease-based stopping criterion
       if (relative_decrease < params.relative_decrease_tolerance) {
-        result.status = TNTStatus::RELATIVE_DECREASE;
+        result.status = TNTStatus::RelativeDecrease;
         break;
       }
 
       // Test stepsize-based stopping criterion ...
       if (h_norm < params.stepsize_tolerance) {
-        result.status = TNTStatus::STEPSIZE;
+        result.status = TNTStatus::Stepsize;
         break;
       }
 
@@ -638,7 +638,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
       Delta = params.alpha1 * h_M_norm;
 
       if (Delta < params.Delta_tolerance) {
-        result.status = TNTStatus::TRUST_REGION;
+        result.status = TNTStatus::TrustRegion;
         break;
       }
     } // trust-region update
@@ -661,41 +661,41 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
     // Print the reason for termination
     switch (result.status) {
-    case TNTStatus::GRADIENT:
+    case TNTStatus::Gradient:
       std::cout << "Found first-order critical point! (Gradient norm: "
                 << grad_f_x_norm << ")" << std::endl;
       break;
-    case TNTStatus::PRECONDITIONED_GRADIENT:
+    case TNTStatus::PreconditionedGradient:
       std::cout << "Found first-order critical point! (Preconditioned "
                    "gradient norm: "
                 << preconditioned_grad_f_x_norm << ")" << std::endl;
       break;
-    case TNTStatus::RELATIVE_DECREASE:
+    case TNTStatus::RelativeDecrease:
       std::cout
           << "Algorithm terminated due to insufficient relative decrease: "
           << relative_decrease << " < " << params.relative_decrease_tolerance
           << std::endl;
       break;
-    case TNTStatus::STEPSIZE:
+    case TNTStatus::Stepsize:
       std::cout
           << "Algorithm terminated due to excessively small step size: |h| = "
           << h_norm << " < " << params.stepsize_tolerance << std::endl;
       break;
-    case TNTStatus::TRUST_REGION:
+    case TNTStatus::TrustRegion:
       std::cout << "Algorithm terminated due to excessively small trust region "
                    "radius: "
                 << Delta << " < " << params.Delta_tolerance << std::endl;
       break;
-    case TNTStatus::ITERATION_LIMIT:
+    case TNTStatus::IterationLimit:
       std::cout << "Algorithm exceeded maximum number of outer iterations"
                 << std::endl;
       break;
-    case TNTStatus::ELAPSED_TIME:
+    case TNTStatus::ElapsedTime:
       std::cout << "Algorithm exceeded maximum allowed computation time: ("
                 << result.elapsed_time << " > " << params.max_computation_time
                 << " seconds)" << std::endl;
       break;
-    case TNTStatus::USER_FUNCTION:
+    case TNTStatus::UserFunction:
       std::cout
           << "Algorithm terminated due to user-supplied stopping criterion"
           << std::endl;
