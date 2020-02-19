@@ -24,12 +24,12 @@
 #include <iostream>
 #include <limits>
 
-#include "Optimization/Smooth/Concepts.h"
+#include "Optimization/Riemannian/Concepts.h"
 #include "Optimization/Util/Stopwatch.h"
 
 namespace Optimization {
 
-namespace Smooth {
+namespace Riemannian {
 
 /** An alias template for a user-definable function that can be
  * used to access various interesting bits of information about the internal
@@ -839,5 +839,5 @@ TNTResult<Vector, Scalar> EuclideanTNT(
                                                params, user_function);
 }
 
-} // namespace Smooth
+} // namespace Riemannian
 } // namespace Optimization

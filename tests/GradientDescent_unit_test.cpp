@@ -4,7 +4,7 @@
 #include <Eigen/Dense>
 #include <gtest/gtest.h>
 
-#include "Optimization/Smooth/GradientDescent.h"
+#include "Optimization/Riemannian/GradientDescent.h"
 
 // Typedef for the numerical type will use in the following tests
 typedef double Scalar;
@@ -37,7 +37,7 @@ TEST(GradientDescentUnitTest, EuclideanGradientDescentRosenbrock) {
 
   // Euclidean gradient operator: returns the Euclidean gradient nablaF(X) at
   // each X df/dx = -2(a-x) - 4bx(y-x^2) df / dy = 2b(y-x^2)
-  Optimization::Smooth::EuclideanVectorField<Vector> nabla_F =
+  Optimization::Riemannian::EuclideanVectorField<Vector> nabla_F =
       [a, b](const Vector &x) {
         Vector df;
         df(0) = -2 * (a - x(0)) - 4 * b * x(0) * (x(1) - std::pow(x(0), 2));
@@ -53,14 +53,14 @@ TEST(GradientDescentUnitTest, EuclideanGradientDescentRosenbrock) {
   /// Run gradient descent optimizer
 
   // Set TNT options
-  Optimization::Smooth::GradientDescentParams<Scalar> params;
+  Optimization::Riemannian::GradientDescentParams<Scalar> params;
   params.gradient_tolerance = 1e-6;
   params.relative_decrease_tolerance = 0;
   params.stepsize_tolerance = 0;
   params.max_iterations = 1000000;
 
-  Optimization::Smooth::GradientDescentResult<Vector, Scalar> result =
-      Optimization::Smooth::EuclideanGradientDescent<Vector, Scalar>(
+  Optimization::Riemannian::GradientDescentResult<Vector, Scalar> result =
+      Optimization::Riemannian::EuclideanGradientDescent<Vector, Scalar>(
           F, nabla_F, x0, params);
 
   // Check function value
@@ -99,7 +99,7 @@ TEST(GradientDescentUnitTest, RiemannianGradientDescentSphere) {
       [](const Vector &X, const Vector &P) { return (X - P).squaredNorm(); };
 
   /// Gradient
-  Optimization::Smooth::VectorField<Vector, Vector, Vector> grad_F =
+  Optimization::Riemannian::VectorField<Vector, Vector, Vector> grad_F =
       [&project](const Vector &X, const Vector &P) {
         // Euclidean gradient
         Vector nabla_f = 2 * (X - P);
@@ -109,12 +109,12 @@ TEST(GradientDescentUnitTest, RiemannianGradientDescentSphere) {
       };
 
   /// Riemannian metric on S^2: this is just the usual inner-product on R^3
-  Optimization::Smooth::RiemannianMetric<Vector, Vector, Scalar, Vector>
+  Optimization::Riemannian::RiemannianMetric<Vector, Vector, Scalar, Vector>
       metric = [](const Vector &X, const Vector &V1, const Vector &V2,
                   const Vector &P) { return V1.dot(V2); };
 
   /// Projection-based retraction operator for S^2
-  Optimization::Smooth::Retraction<Vector, Vector, Vector> retract =
+  Optimization::Riemannian::Retraction<Vector, Vector, Vector> retract =
       [](const Vector &X, const Vector &V, const Vector &P) {
         return (X + V).normalized();
       };
@@ -127,14 +127,14 @@ TEST(GradientDescentUnitTest, RiemannianGradientDescentSphere) {
   /// Run gradient descent optimizer
 
   // Set gradient descent options
-  Optimization::Smooth::GradientDescentParams<Scalar> params;
+  Optimization::Riemannian::GradientDescentParams<Scalar> params;
   params.gradient_tolerance = 1e-6;
   params.relative_decrease_tolerance = 0;
   params.stepsize_tolerance = 0;
   params.max_iterations = 1000000;
 
-  Optimization::Smooth::GradientDescentResult<Vector, Scalar> result =
-      Optimization::Smooth::GradientDescent<Vector, Vector, Scalar, Vector>(
+  Optimization::Riemannian::GradientDescentResult<Vector, Scalar> result =
+      Optimization::Riemannian::GradientDescent<Vector, Vector, Scalar, Vector>(
           F, grad_F, metric, retract, X0, P, params);
 
   // Check function value

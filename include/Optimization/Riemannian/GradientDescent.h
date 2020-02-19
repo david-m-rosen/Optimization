@@ -11,11 +11,11 @@
 #include <limits>
 #include <math.h>
 
-#include "Optimization/Smooth/Concepts.h"
+#include "Optimization/Riemannian/Concepts.h"
 #include "Optimization/Util/Stopwatch.h"
 
 namespace Optimization {
-namespace Smooth {
+namespace Riemannian {
 
 /** An alias template for a user-definable function that can be
  * used to access various interesting bits of information about the internal
@@ -407,5 +407,5 @@ GradientDescentResult<Vector, Scalar> EuclideanGradientDescent(
       f, grad_f, EuclideanMetric<Vector, Scalar, Args...>,
       EuclideanRetraction<Vector, Args...>, x0, args..., params, user_function);
 }
-} // namespace Smooth
+} // namespace Riemannian
 } // namespace Optimization

@@ -4,7 +4,7 @@
 #include <Eigen/Dense>
 #include <gtest/gtest.h>
 
-#include "Optimization/Smooth/TNT.h"
+#include "Optimization/Riemannian/TNT.h"
 
 // Typedef for the numerical type will use in the following tests
 typedef double Scalar;
@@ -31,7 +31,7 @@ protected:
   /// Set up variables and functions used in the following tests
 
   // Standard Euclidean inner product for vectors
-  Optimization::Smooth::RiemannianMetric<Variable, Tangent, Scalar> metric =
+  Optimization::Riemannian::RiemannianMetric<Variable, Tangent, Scalar> metric =
       [](const Variable &X, const Tangent &V1, const Tangent &V2) {
         return V1.dot(V2);
       };
@@ -58,18 +58,18 @@ protected:
   Eigen::DiagonalMatrix<Scalar, large_dim> large_M;
 
   // Hessian operators corresponding to P and N
-  Optimization::Smooth::LinearOperator<Variable, Tangent> small_Pop;
-  Optimization::Smooth::LinearOperator<Variable, Tangent> large_Pop;
+  Optimization::Riemannian::LinearOperator<Variable, Tangent> small_Pop;
+  Optimization::Riemannian::LinearOperator<Variable, Tangent> large_Pop;
 
-  Optimization::Smooth::LinearOperator<Variable, Tangent> small_Nop;
+  Optimization::Riemannian::LinearOperator<Variable, Tangent> small_Nop;
 
   // Preconditioning operator: multiplies v by M^-1
-  Optimization::Smooth::LinearOperator<Variable, Tangent> small_MinvOp;
-  Optimization::Smooth::LinearOperator<Variable, Tangent> large_MinvOp;
+  Optimization::Riemannian::LinearOperator<Variable, Tangent> small_MinvOp;
+  Optimization::Riemannian::LinearOperator<Variable, Tangent> large_MinvOp;
 
   // Null-op (identity) preconditioner
   std::experimental::optional<
-      Optimization::Smooth::LinearOperator<Variable, Tangent>>
+      Optimization::Riemannian::LinearOperator<Variable, Tangent>>
       Id_precon;
 
   /// Arguments to Steihaug-Toint truncated preconditioned conjugate gradient
@@ -154,7 +154,7 @@ TEST_F(STPCGUnitTest, ExactSTPCG) {
   /// and an *exact* stopping criterion and an infinite trust region radius, to
   /// ensure that the underlying method is implemented properly
 
-  Tangent V = Optimization::Smooth::STPCG<Variable, Tangent, Scalar>(
+  Tangent V = Optimization::Riemannian::STPCG<Variable, Tangent, Scalar>(
       X, small_g, small_Pop, metric, Id_precon, update_step_norm,
       num_iterations, std::numeric_limits<Scalar>::max(), small_dim, 0);
 
@@ -172,7 +172,7 @@ TEST_F(STPCGUnitTest, STPCGwithNegativeCurvature) {
   /// Test STPCG with small negative-definite diagonal Hessian to ensure that
   /// the step to the boundary of the trust-region is computed properly
 
-  Tangent V = Optimization::Smooth::STPCG<Variable, Tangent, Scalar>(
+  Tangent V = Optimization::Riemannian::STPCG<Variable, Tangent, Scalar>(
       X, small_g, small_Nop, metric, Id_precon, update_step_norm,
       num_iterations, Delta, small_dim, 0);
 
@@ -193,7 +193,7 @@ TEST_F(STPCGUnitTest, STPCGwithPreconditioning) {
   /// Now test using a positive-definite Hessian and a (nontrivial)
   /// positive-definite preconditioning operator
 
-  Tangent v = Optimization::Smooth::STPCG<Variable, Tangent, Scalar>(
+  Tangent v = Optimization::Riemannian::STPCG<Variable, Tangent, Scalar>(
       X, small_g, small_Pop, metric, small_MinvOp, update_step_norm,
       num_iterations, std::numeric_limits<Scalar>::max(), small_dim, 0);
 
@@ -212,7 +212,7 @@ TEST_F(STPCGUnitTest, STPCGwithNegativeCurvatureAndPreconditioning) {
   /// Test with a negative-definite Hessian and positive-definite
   /// preconditioning operator
 
-  Tangent V = Optimization::Smooth::STPCG<Variable, Tangent, Scalar>(
+  Tangent V = Optimization::Riemannian::STPCG<Variable, Tangent, Scalar>(
       X, small_g, small_Nop, metric, small_MinvOp, update_step_norm,
       num_iterations, Delta, small_dim, 0);
 
@@ -232,9 +232,10 @@ TEST_F(STPCGUnitTest, SmallSTPCGwithTruncation) {
 
   /// Test STPCG with a small positive-definite Hessian and truncation
 
-  Tangent V_truncated = Optimization::Smooth::STPCG<Variable, Tangent, Scalar>(
-      X, small_g, small_Pop, metric, Id_precon, update_step_norm,
-      num_iterations, Delta, small_dim, kappa_fgr, theta);
+  Tangent V_truncated =
+      Optimization::Riemannian::STPCG<Variable, Tangent, Scalar>(
+          X, small_g, small_Pop, metric, Id_precon, update_step_norm,
+          num_iterations, Delta, small_dim, kappa_fgr, theta);
 
   // Compute the norm of the predicted gradient g_pred = H * v + g at the
   // truncated solution
@@ -255,9 +256,10 @@ TEST_F(STPCGUnitTest, LargeSTPCGwithTruncation) {
 
   /// Test STPCG with a large positive-definite Hessian and truncation
 
-  Tangent V_truncated = Optimization::Smooth::STPCG<Variable, Tangent, Scalar>(
-      X, large_g, large_Pop, metric, Id_precon, update_step_norm,
-      num_iterations, Delta, large_dim, kappa_fgr, theta);
+  Tangent V_truncated =
+      Optimization::Riemannian::STPCG<Variable, Tangent, Scalar>(
+          X, large_g, large_Pop, metric, Id_precon, update_step_norm,
+          num_iterations, Delta, large_dim, kappa_fgr, theta);
 
   Scalar truncated_grad_norm = (large_P * V_truncated + large_g).norm();
   Scalar truncate_grad_norm_relative_error =
@@ -274,10 +276,11 @@ TEST_F(STPCGUnitTest, SmallSTPCGwithPreconditioningAndTruncation) {
   /// Test preconditioned STPCG with a small positive-definite Hessian and
   /// truncation
 
-  Tangent V_truncated = Optimization::Smooth::STPCG<Variable, Tangent, Scalar>(
-      X, small_g, small_Pop, metric, small_MinvOp, update_step_norm,
-      num_iterations, std::numeric_limits<Scalar>::max(), small_dim, kappa_fgr,
-      theta);
+  Tangent V_truncated =
+      Optimization::Riemannian::STPCG<Variable, Tangent, Scalar>(
+          X, small_g, small_Pop, metric, small_MinvOp, update_step_norm,
+          num_iterations, std::numeric_limits<Scalar>::max(), small_dim,
+          kappa_fgr, theta);
 
   Scalar truncated_grad_norm = (small_P * V_truncated + small_g).norm();
   Scalar truncate_grad_norm_relative_error =
@@ -295,10 +298,11 @@ TEST_F(STPCGUnitTest, LargeSTPCGwithPreconditioningAndTruncation) {
   /// Test preconditioned STPCG with a large positive-definite Hessian and
   /// truncation
 
-  Tangent V_truncated = Optimization::Smooth::STPCG<Variable, Tangent, Scalar>(
-      X, large_g, large_Pop, metric, large_MinvOp, update_step_norm,
-      num_iterations, std::numeric_limits<Scalar>::max(), large_dim, kappa_fgr,
-      theta);
+  Tangent V_truncated =
+      Optimization::Riemannian::STPCG<Variable, Tangent, Scalar>(
+          X, large_g, large_Pop, metric, large_MinvOp, update_step_norm,
+          num_iterations, std::numeric_limits<Scalar>::max(), large_dim,
+          kappa_fgr, theta);
 
   Scalar truncated_grad_norm = (large_P * V_truncated + large_g).norm();
   Scalar truncate_grad_norm_relative_error =
@@ -336,7 +340,7 @@ TEST(TNTUnitTest, EuclideanTNTRosenbrock) {
 
   // Euclidean gradient operator: returns the Euclidean gradient nablaF(X) at
   // each X df/dx = -2(a-x) - 4bx(y-x^2) df / dy = 2b(y-x^2)
-  Optimization::Smooth::EuclideanVectorField<Vector> nabla_F =
+  Optimization::Riemannian::EuclideanVectorField<Vector> nabla_F =
       [a, b](const Vector &x) {
         Vector df;
         df(0) = -2 * (a - x(0)) - 4 * b * x(0) * (x(1) - std::pow(x(0), 2));
@@ -347,7 +351,7 @@ TEST(TNTUnitTest, EuclideanTNTRosenbrock) {
   // Euclidean Hessian constructor: Returns the Hessian operator H(X) at X
   // H(X) = [2 - 4by + 12bx^2   -4bx
   //      -4bx               2b]
-  Optimization::Smooth::EuclideanLinearOperatorConstructor<Vector> HC =
+  Optimization::Riemannian::EuclideanLinearOperatorConstructor<Vector> HC =
       [a, b](const Vector &x) {
         // Compute Euclidean Hessian at X
         Matrix H;
@@ -359,7 +363,7 @@ TEST(TNTUnitTest, EuclideanTNTRosenbrock) {
         // Construct and return Euclidean Hessian operator: this is a function
         // that accepts as input a point X and tangent vector V, and returns
         // H(X)[V], the value of the Hessian operator at X applied to V
-        Optimization::Smooth::EuclideanLinearOperator<Vector> Hess =
+        Optimization::Riemannian::EuclideanLinearOperator<Vector> Hess =
             [H](const Vector &x, const Vector &v) { return H * v; };
 
         return Hess;
@@ -373,11 +377,11 @@ TEST(TNTUnitTest, EuclideanTNTRosenbrock) {
   /// Run TNT optimizer
 
   // Set TNT options
-  Optimization::Smooth::TNTParams<Scalar> tnt_params;
+  Optimization::Riemannian::TNTParams<Scalar> tnt_params;
   tnt_params.stepsize_tolerance = 0; // Allow arbitrarily small stepsizes
 
-  Optimization::Smooth::TNTResult<Vector, Scalar> result =
-      Optimization::Smooth::EuclideanTNT<Vector, Scalar>(
+  Optimization::Riemannian::TNTResult<Vector, Scalar> result =
+      Optimization::Riemannian::EuclideanTNT<Vector, Scalar>(
           F, nabla_F, HC, x0, std::experimental::nullopt, tnt_params);
 
   // Check function value
@@ -416,7 +420,7 @@ TEST(TNTUnitTest, RiemannianTNTSphere) {
       [](const Vector &X, const Vector &P) { return (X - P).squaredNorm(); };
 
   /// Gradient
-  Optimization::Smooth::VectorField<Vector, Vector, Vector> grad_F =
+  Optimization::Riemannian::VectorField<Vector, Vector, Vector> grad_F =
       [&project](const Vector &X, const Vector &P) {
         // Euclidean gradient
         Vector nabla_f = 2 * (X - P);
@@ -427,16 +431,17 @@ TEST(TNTUnitTest, RiemannianTNTSphere) {
 
   /// Riemannian Hessian constructor: Returns the Riemannian Hessian operator
   /// H(X): T_X(S^2) -> T_X(S^2) at X
-  Optimization::Smooth::LinearOperatorConstructor<Vector, Vector, Vector> HC =
-      [&project, &grad_F](const Vector &X, Vector &P) {
+  Optimization::Riemannian::LinearOperatorConstructor<Vector, Vector, Vector>
+      HC = [&project, &grad_F](const Vector &X, Vector &P) {
         // Euclidean Hessian matrix
         Matrix EucHess = 2 * Matrix::Identity();
 
         // Return Riemannian Hessian-vector product operator using the
         // Euclidean Hessian
-        Optimization::Smooth::LinearOperator<Vector, Vector, Vector> Hessian =
-            [&project, EucHess, &grad_F](const Vector &X, const Vector &Xdot,
-                                         Vector &P) -> Vector {
+        Optimization::Riemannian::LinearOperator<Vector, Vector, Vector>
+            Hessian = [&project, EucHess, &grad_F](const Vector &X,
+                                                   const Vector &Xdot,
+                                                   Vector &P) -> Vector {
           return project(X, EucHess * Xdot) - X.dot(grad_F(X, P)) * Xdot;
         };
 
@@ -444,12 +449,12 @@ TEST(TNTUnitTest, RiemannianTNTSphere) {
       };
 
   /// Riemannian metric on S^2: this is just the usual inner-product on R^3
-  Optimization::Smooth::RiemannianMetric<Vector, Vector, Scalar, Vector>
+  Optimization::Riemannian::RiemannianMetric<Vector, Vector, Scalar, Vector>
       metric = [](const Vector &X, const Vector &V1, const Vector &V2,
                   const Vector &P) { return V1.dot(V2); };
 
   /// Projection-based retraction operator for S^2
-  Optimization::Smooth::Retraction<Vector, Vector, Vector> retract =
+  Optimization::Riemannian::Retraction<Vector, Vector, Vector> retract =
       [](const Vector &X, const Vector &V, const Vector &P) {
         return (X + V).normalized();
       };
@@ -461,11 +466,11 @@ TEST(TNTUnitTest, RiemannianTNTSphere) {
 
   /// Run TNT optimizer
   // Set TNT options
-  Optimization::Smooth::TNTParams<Scalar> tnt_params;
+  Optimization::Riemannian::TNTParams<Scalar> tnt_params;
   tnt_params.stepsize_tolerance = 0;
 
-  Optimization::Smooth::TNTResult<Vector, Scalar> result =
-      Optimization::Smooth::TNT<Vector, Vector, Scalar, Vector>(
+  Optimization::Riemannian::TNTResult<Vector, Scalar> result =
+      Optimization::Riemannian::TNT<Vector, Vector, Scalar, Vector>(
           F, grad_F, HC, metric, retract, X0, P, std::experimental::nullopt,
           tnt_params);
 

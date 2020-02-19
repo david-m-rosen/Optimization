@@ -7,8 +7,8 @@
  * whose (global) minimizer is f(a,a^2) = 0
  */
 
-#include "Optimization/Smooth/GradientDescent.h"
-#include "Optimization/Smooth/TNT.h"
+#include "Optimization/Riemannian/GradientDescent.h"
+#include "Optimization/Riemannian/TNT.h"
 
 #include <Eigen/Dense>
 
@@ -18,7 +18,7 @@ typedef Eigen::Matrix<Scalar, 2, 2> Matrix;
 
 using namespace std;
 using namespace Optimization;
-using namespace Smooth;
+using namespace Riemannian;
 
 int main() {
 
@@ -94,7 +94,7 @@ int main() {
        << endl
        << endl;
   // Set TNT options
-  Optimization::Smooth::TNTParams<Scalar> tnt_params;
+  Optimization::Riemannian::TNTParams<Scalar> tnt_params;
   tnt_params.verbose = true;
 
   TNTResult<Vector, Scalar> tnt_result = EuclideanTNT<Vector, Scalar>(

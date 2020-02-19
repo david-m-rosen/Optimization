@@ -15,7 +15,7 @@
 
 namespace Optimization {
 
-namespace Smooth {
+namespace Riemannian {
 
 /** Useful typedefs for implementing templated/parameterized smooth numerical
  * optimization methods on Riemannian manifolds.
@@ -149,5 +149,5 @@ Vector EuclideanRetraction(const Vector &X, const Vector &V, Args &... args) {
   return X + V;
 }
 
-} // namespace Smooth
+} // namespace Riemannian
 } // namespace Optimization

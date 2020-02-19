@@ -7,8 +7,8 @@
 #include <fstream>
 #include <time.h>
 
-#include "Optimization/Smooth/GradientDescent.h"
-#include "Optimization/Smooth/TNT.h"
+#include "Optimization/Riemannian/GradientDescent.h"
+#include "Optimization/Riemannian/TNT.h"
 
 typedef double Scalar;
 typedef Eigen::Matrix<Scalar, 3, 1> Vector;
@@ -16,7 +16,7 @@ typedef Eigen::Matrix<Scalar, 3, 3> Matrix;
 
 using namespace std;
 using namespace Optimization;
-using namespace Smooth;
+using namespace Riemannian;
 int main() {
 
   /// SET UP OPTIMIZATION
