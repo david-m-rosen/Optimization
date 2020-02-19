@@ -1,5 +1,5 @@
 # Find Eigen library
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/")
 find_package(Eigen3 3.3.3 REQUIRED)
 if(EIGEN3_FOUND)
 message(STATUS "Found Eigen3 library (version ${EIGEN3_VERSION})")
