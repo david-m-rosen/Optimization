@@ -208,7 +208,7 @@ STPCG(const Variable &X, const Tangent &grad,
     // Update search direction p_k
     p_k = -v_k + beta_k * p_k;
 
-    num_iterations++;
+    ++num_iterations;
   } // while( ... )
 
   update_step_M_norm = sqrt(sk_M_2);
@@ -479,7 +479,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
   // Basic trust-region iteration -- see Algorithm 6.1.1 of "Trust-Region
   // Methods"
-  for (size_t iteration = 0; iteration < params.max_iterations; iteration++) {
+  for (size_t iteration = 0; iteration < params.max_iterations; ++iteration) {
     double elapsed_time = Stopwatch::tock(start_time);
 
     if (elapsed_time > params.max_computation_time) {
