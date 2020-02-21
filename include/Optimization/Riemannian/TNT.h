@@ -566,12 +566,8 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     /// Determine acceptance of trial point
     bool step_accepted = (!std::isnan(rho) && rho > params.eta1);
 
-    if (params.verbose) {
-      if (step_accepted)
-        std::cout << "Step accepted ";
-      else
-        std::cout << "Step REJECTED!";
-    }
+    if (params.verbose)
+      std::cout << (step_accepted ? "Step accepted" : "Step REJECTED!");
 
     // Record output
     result.inner_iterations.push_back(inner_iterations);
