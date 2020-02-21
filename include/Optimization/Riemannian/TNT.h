@@ -466,8 +466,6 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     // Set display options for real-valued quantities
     std::cout << std::scientific;
     std::cout.precision(params.precision);
-  }
-  if (params.verbose) {
     std::cout << "Truncated-Newton trust-region optimization: " << std::endl
               << std::endl;
   }
