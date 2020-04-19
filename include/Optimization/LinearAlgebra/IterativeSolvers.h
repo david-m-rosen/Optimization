@@ -89,9 +89,9 @@ using STPCGPreconditioner =
  * projected conjugate-gradient algorithm for approximately solving a
  * trust-region problem of the form:
  *
- * min_s <g, s> + (1/2)<s, H*s>
- * s.t.  A*s = 0
- *       |s|_P <= Delta
+ *   min_s <g, s> + (1/2)<s, H*s>
+ *   s.t.  A*s = 0
+ *         |s|_P <= Delta
  *
  * This specific implementation is based upon Algorithms 5.4.2 and 7.5.1 in
  * the reference "Trust-Region Methods" by Conn, Gould, and Toint, and
@@ -164,7 +164,6 @@ using STPCGPreconditioner =
  * - epsilon is a numerical tolerance for determining whether a vector lies
  *   in the kernel of  the operator H, defined as |H*x|/|x| < epsilon.
  */
-
 template <typename Vector, typename Multiplier, typename Scalar = double,
           typename... Args>
 Vector STPCG(const Vector &g, const SymmetricLinearOperator<Vector, Args...> &H,

@@ -24,6 +24,7 @@
 #include <iostream>
 #include <limits>
 
+#include "Optimization/LinearAlgebra/IterativeSolvers.h"
 #include "Optimization/Riemannian/Concepts.h"
 #include "Optimization/Util/Stopwatch.h"
 
@@ -68,152 +69,6 @@ using TNTUserFunction =
                        const LinearOperator<Variable, Tangent, Args...> &HessOp,
                        Scalar Delta, size_t num_STPCG_iters, const Tangent &h,
                        Scalar df, Scalar rho, bool accepted, Args &... args)>;
-
-/** This function implements the Steihaug-Toint truncated preconditioned
- * conjugate-gradient algorithm used to compute the update step in a
- * truncated-Newton trust-region optimization method.  This
- * specific implementation follows the pseudocode given as Algorithm 7.5.1 in
- * the reference "Trust-Region Methods" by Conn, Gould, and Toint.  Here:
- *
- * - X is the value of the optimization variable at which the linear model
- *   is constructed
- * - grad is the gradient vector computed for the model objective at X
- * - Hess is a linear operator that models the Hessian of the objective at X
- * - metric is the Riemannian metric at the current iterate X
- * - precon is a *positive-definite* preconditioning operator
- * - Delta is the trust-region radius around X, in the M-norm determined by
- *   the preconditioner; if the preconditioner acts as v -> M^{-1} v, then the
- *   trust-region is given by
- *
- *   || s ||_M <= Delta
- *
- * - kappa_fgr and theta are parameters that control the stopping criteria
- *   for the algorithm; termination occurs whenever the predicted gradient g_k
- *   at the iterate obtained by applying the current update step (as predicted
- *   by the local quadratic model) satisfies:
- *
- *   || g_k || <= ||g_0|| min [kappa_fgr, || g_0 ||^theta]
- *
- *   (cf. Algorithm 7.5.1 of "Trust-Region Methods").
- *
- * - update_step_M_norm is a return value that gives the norm || h ||_M of
- *   the update step in the M-norm determined by the preconditioner
- */
-
-template <typename Variable, typename Tangent, typename Scalar = double,
-          typename... Args>
-Tangent
-STPCG(const Variable &X, const Tangent &grad,
-      const LinearOperator<Variable, Tangent, Args...> &Hess,
-      const RiemannianMetric<Variable, Tangent, Scalar, Args...> &metric,
-      const std::experimental::optional<
-          LinearOperator<Variable, Tangent, Args...>> &precon,
-      Scalar &update_step_M_norm, size_t &num_iterations, Scalar Delta,
-      Args &... args, size_t max_iterations = 1000, Scalar kappa_fgr = .1,
-      Scalar theta = .5) {
-  /// INITIALIZATION
-
-  // The current estimate for the truncated-Newton update step s_k; initialized
-  // to zero
-  Tangent s_k = Tangent::Zero(grad.rows(), grad.cols());
-
-  // The gradient at the current update step s_k
-  Tangent g_k = grad;
-  // The preconditioned value of g_k
-  Tangent v_k = (precon ? (*precon)(X, g_k, args...) : g_k);
-  // The current step direction p_k for updating s_k
-  Tangent p_k = -v_k;
-
-  // Value of inner product < s_k, M * p_k >; initially zero since s0 = 0
-  Scalar sk_M_pk = 0;
-  // Squared M-norm of current Newton step estimate s_k:  || s_k ||_M^2;
-  // initially zero since s0 = 0
-  Scalar sk_M_2 = 0;
-  // Squared M-norm of current update step direction p_k: || p_k ||_M^2
-  Scalar pk_M_2 = metric(X, g_k, v_k, args...);
-
-  /// Useful cached variables
-  // Squared radius of trust-region
-  Scalar Delta_2 = Delta * Delta;
-  // Norm of initial (unpreconditioned) gradient
-  Scalar g0_norm = sqrt(metric(X, grad, grad, args...));
-  // Target norm of (unpreconditioned) gradient after applying update step s_k
-  Scalar target_grad_norm =
-      g0_norm * std::min(kappa_fgr, std::pow(g0_norm, theta));
-
-  Scalar alpha_k; // Scalar used to compute the full Newton step along direction
-                  // p_k
-  Scalar beta_k;
-  Scalar kappa_k; // Value of inner product < p_k, H*p_k >
-
-  num_iterations = 0;
-  while (num_iterations < max_iterations) {
-    /// CHECK TERMINATION CRITERIA
-
-    /// "Standard" termination criteria based upon predicted gradient after
-    /// applying the current update step s_k
-    if (std::sqrt(metric(X, g_k, g_k, args...)) <= target_grad_norm) {
-      update_step_M_norm = std::sqrt(sk_M_2);
-      return s_k;
-    }
-
-    /// Next, check termination criteria based upon check for negative curvature
-    /// or overly-long steplengths
-
-    // Compute kappa
-    kappa_k = metric(X, p_k, Hess(X, p_k, args...), args...);
-
-    // Compute (full) steplength scalar alpha_k
-    alpha_k = metric(X, g_k, v_k, args...) / kappa_k;
-
-    // Compute norm of proposed (full) step
-    Scalar skplus1_M_2 =
-        sk_M_2 + 2 * alpha_k * sk_M_pk + alpha_k * alpha_k * pk_M_2;
-
-    if ((kappa_k <= 0) || (skplus1_M_2 > Delta_2)) {
-      /** Either p_k is a direction of negative curvature, or the full
-       * (unrestricted) step along this direction leaves the trust-region.  In
-       * either case, we would like to rescale the stepsize alpha_k to ensure
-       * that the proposed step terminates _on_ the trust-region boundary, and
-       * then return the resulting step as our final answer */
-
-      Scalar sigma_k =
-          (-sk_M_pk + sqrt(sk_M_pk * sk_M_pk + pk_M_2 * (Delta_2 - sk_M_2))) /
-          pk_M_2;
-
-      update_step_M_norm = Delta;
-
-      return s_k + sigma_k * p_k;
-    }
-
-    /// UPDATE!  Compute values for next iteration
-
-    // Update Newton step s_k -> s_kplus1
-    s_k = s_k + alpha_k * p_k;
-    // Update estimate for gradient after applying s_k:  g_k -> g_kplus1
-    g_k = g_k + alpha_k * Hess(X, p_k, args...);
-    // Update preconditioned gradient estimate: v_k -> v_kplus1
-    v_k = (precon ? (*precon)(X, g_k, args...) : g_k);
-
-    // Compute beta_k for *current* iterate (using *updated* values g_kplus1 and
-    // v_kplus1 and *current* iterate
-    // value alpha_k, kappa_k)
-    beta_k = metric(X, g_k, v_k, args...) / (alpha_k * kappa_k);
-
-    // Update inner products and norms
-    sk_M_2 = skplus1_M_2;
-    sk_M_pk = beta_k * (sk_M_pk + alpha_k * pk_M_2);
-    pk_M_2 = metric(X, g_k, v_k, args...) + beta_k * beta_k * pk_M_2;
-
-    // Update search direction p_k
-    p_k = -v_k + beta_k * p_k;
-
-    ++num_iterations;
-  } // while( ... )
-
-  update_step_M_norm = sqrt(sk_M_2);
-  return s_k;
-}
 
 /** A lightweight struct containing a few additional algorithm-specific
  * configuration parameters for a truncated-Newton trust-region method
@@ -459,6 +314,36 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     preconditioned_grad_f_x_norm = grad_f_x_norm;
   }
 
+  /// Set up function handles for inner STPCG linear system solver
+
+  // Linear operator
+  Optimization::LinearAlgebra::SymmetricLinearOperator<Tangent, Args...> H =
+      [&x, &Hess](const Tangent &v, Args &... args) -> Tangent {
+    return Hess(x, v, args...);
+  };
+
+  // Inner product
+  Optimization::LinearAlgebra::InnerProduct<Tangent, Scalar, Args...>
+      inner_product = [&x, &metric](const Tangent &v1, const Tangent &v2,
+                                    Args &... args) -> Scalar {
+    return metric(x, v1, v2, args...);
+  };
+
+  // Set up [optional] preconditioner, if the user supplied one
+
+  Optimization::LinearAlgebra::STPCGPreconditioner<Tangent, Tangent, Args...>
+      P = [&x, &precon](const Tangent &v,
+                        Args &... args) -> std::pair<Tangent, Tangent> {
+    return std::pair<Tangent, Tangent>((*precon)(x, v, args...), Tangent());
+  };
+
+  std::experimental::optional<Optimization::LinearAlgebra::STPCGPreconditioner<
+      Tangent, Tangent, Args...>>
+  Pop(precon ? P
+             : std::experimental::optional<
+                   Optimization::LinearAlgebra::STPCGPreconditioner<
+                       Tangent, Tangent, Args...>>(std::experimental::nullopt));
+
   // Initialize trust-region radius
   Delta = params.Delta0;
 
@@ -522,9 +407,10 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
     // Norm of the update in the norm determined by the preconditioner
     size_t inner_iterations;
-    Tangent h = STPCG<Variable, Tangent, Scalar, Args...>(
-        x, grad, Hess, metric, precon, h_M_norm, inner_iterations, Delta,
-        args..., params.max_TPCG_iterations, params.kappa_fgr, params.theta);
+    Tangent h =
+        Optimization::LinearAlgebra::STPCG<Tangent, Tangent, Scalar, Args...>(
+            grad, H, inner_product, args..., h_M_norm, inner_iterations, Delta,
+            params.max_TPCG_iterations, params.kappa_fgr, params.theta, Pop);
     h_norm = sqrt(metric(x, h, h, args...));
 
     if (params.verbose) {

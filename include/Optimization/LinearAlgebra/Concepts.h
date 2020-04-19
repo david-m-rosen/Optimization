@@ -23,7 +23,7 @@ using SymmetricLinearOperator = LinearOperator<X, X, Args...>;
 /** An alias template for an inner product on Vectors*/
 template <typename Vector, typename Scalar = double, typename... Args>
 using InnerProduct =
-    std::function<Scalar(const Vector &X, const Vector &Y, Args...)>;
+    std::function<Scalar(const Vector &X, const Vector &Y, Args &...)>;
 
 } // namespace LinearAlgebra
 } // namespace Optimization
