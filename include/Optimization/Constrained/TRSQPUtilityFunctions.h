@@ -387,11 +387,9 @@ IneqVector reset_slacks(const IneqVector &s, const IneqVector &cix) {
 template <typename IneqVector, typename Scalar = double>
 Scalar compute_maximum_admissible_steplength(const IneqVector &s,
                                              const IneqVector &ds, Scalar tau) {
-
-  if (min(ds) >= 0) {
+  if ((dim(s) == 0) || (min(ds) >= 0)) {
     // If all elements of ds are positive, then no point along the ray s +
-    // alpha
-    // * ds will will intersect the boundary of the nonnegative orthant, so
+    // alpha ds will will intersect the boundary of the nonnegative orthant, so
     // return the full steplength 1
 
     return 1;

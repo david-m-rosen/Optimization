@@ -730,14 +730,12 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
 
             // Compute maximum admissible steplengths for primal and dual
             // second-order-corrected steps (cf. eq. (3.12))
-            Scalar gamma_z_soc =
+            Scalar gamma_soc =
                 compute_maximum_admissible_steplength(s, d.second, params.tau);
-            Scalar gamma_lambda_soc = compute_maximum_admissible_steplength(
-                lambda.second, delta_lambda.second, params.tau);
 
             // Compute scaled second-order primal and dual updates
-            d *= gamma_z_soc;
-            delta_lambda *= gamma_lambda_soc;
+            d *= gamma_soc;
+            delta_lambda *= gamma_soc;
 
             // Compute second-order-corrected trial point
             zplus = z + d;
