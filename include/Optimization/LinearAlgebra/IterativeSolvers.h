@@ -221,7 +221,7 @@ Vector STPCG(const Vector &g, const SymmetricLinearOperator<Vector, Args...> &H,
   Vector v_k;
 
   // Lagrange multipliers for constraint preconditioning operator
-  Vector lambda_k;
+  Multiplier lambda_k;
 
   // Update direction for s_k
   Vector p_k;

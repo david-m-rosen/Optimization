@@ -316,6 +316,9 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
   /// Set up function handles for inner STPCG linear system solver
 
+  // We perform *unconstrained* optimization, so we have no Lagrange multipliers
+  typedef std::nullptr_t MultiplierType;
+
   // Linear operator
   Optimization::LinearAlgebra::SymmetricLinearOperator<Tangent, Args...> H =
       [&x, &Hess](const Tangent &v, Args &... args) -> Tangent {
@@ -329,20 +332,22 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     return metric(x, v1, v2, args...);
   };
 
-  // Set up [optional] preconditioner, if the user supplied one
-
-  Optimization::LinearAlgebra::STPCGPreconditioner<Tangent, Tangent, Args...>
+  // Optional preconditioner, if the user supplied one
+  Optimization::LinearAlgebra::STPCGPreconditioner<Tangent, MultiplierType,
+                                                   Args...>
       P = [&x, &precon](const Tangent &v,
-                        Args &... args) -> std::pair<Tangent, Tangent> {
-    return std::pair<Tangent, Tangent>((*precon)(x, v, args...), Tangent());
+                        Args &... args) -> std::pair<Tangent, MultiplierType> {
+    return std::pair<Tangent, MultiplierType>((*precon)(x, v, args...),
+                                              MultiplierType());
   };
 
   std::experimental::optional<Optimization::LinearAlgebra::STPCGPreconditioner<
-      Tangent, Tangent, Args...>>
+      Tangent, MultiplierType, Args...>>
   Pop(precon ? P
              : std::experimental::optional<
                    Optimization::LinearAlgebra::STPCGPreconditioner<
-                       Tangent, Tangent, Args...>>(std::experimental::nullopt));
+                       Tangent, MultiplierType, Args...>>(
+                   std::experimental::nullopt));
 
   // Initialize trust-region radius
   Delta = params.Delta0;
@@ -407,10 +412,10 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
     // Norm of the update in the norm determined by the preconditioner
     size_t inner_iterations;
-    Tangent h =
-        Optimization::LinearAlgebra::STPCG<Tangent, Tangent, Scalar, Args...>(
-            grad, H, inner_product, args..., h_M_norm, inner_iterations, Delta,
-            params.max_TPCG_iterations, params.kappa_fgr, params.theta, Pop);
+    Tangent h = Optimization::LinearAlgebra::STPCG<Tangent, MultiplierType,
+                                                   Scalar, Args...>(
+        grad, H, inner_product, args..., h_M_norm, inner_iterations, Delta,
+        params.max_TPCG_iterations, params.kappa_fgr, params.theta, Pop);
     h_norm = sqrt(metric(x, h, h, args...));
 
     if (params.verbose) {
