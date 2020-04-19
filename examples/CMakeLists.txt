@@ -30,4 +30,14 @@ add_executable(ADMM_example ${CMAKE_CURRENT_SOURCE_DIR}/ADMM_example.cpp)
 target_link_libraries(ADMM_example Optimization)
 
 
+# Build a minimal working example to demonstrate the TRSQP method applied to solve a simple nonconvex quadratic program
+add_executable(nonconvex_QP_example ${CMAKE_CURRENT_SOURCE_DIR}/nonconvex_QP_example.cpp)
+target_link_libraries(nonconvex_QP_example Optimization)
+
+# Another example to demonstrate the TRSQP method, applied to a more complicated nonconvex problem
+add_executable(constrained_optimization_example ${CMAKE_CURRENT_SOURCE_DIR}/constrained_optimization_example.cpp)
+target_link_libraries(constrained_optimization_example Optimization)
+
+
+
 

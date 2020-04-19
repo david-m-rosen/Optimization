@@ -22,7 +22,6 @@ set(BUILD_OPTIMIZATION_EXAMPLES OFF CACHE BOOL "Build example executables? [disa
 set(BUILD_OPTIMIZATION_TESTS OFF CACHE BOOL "Build unit tests? [disabled by default]")
 # Enable faster instruction sets (SIMD/AVX)
 set(ENABLE_VECTORIZATION OFF CACHE BOOL "Enable vectorized instruction sets (SIMD/AVX)? [disabled by default]")
-
 message(STATUS "Processing CMakeLists for header-only library ${PROJECT_NAME}:\n")
 
 # SET UP EXPORT OF OPTIMIZATION LIBRARY
@@ -42,12 +41,20 @@ set(OPTIMIZATION_TOPLEVEL_DIR ${OPTIMIZATION_INCLUDE_DIR}/Optimization)
 set(OPTIMIZATION_HDRS
     ${OPTIMIZATION_TOPLEVEL_DIR}/Base/Concepts.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Util/Stopwatch.h
-    ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/Concepts.h
-    ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/GradientDescent.h
-    ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/TNT.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/Concepts.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQPTypes.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/Pair.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQPUtilityFunctions.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQPSubproblemSolvers.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQP.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/Concepts.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/ProximalGradient.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/ADMM.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/LinearAlgebra/Concepts.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/LinearAlgebra/IterativeSolvers.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/Concepts.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/GradientDescent.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/TNT.h
     )
 message(STATUS "Found ${PROJECT_NAME} header files:\n ${OPTIMIZATION_HDRS}")
 
@@ -65,6 +72,14 @@ export(TARGETS ${PROJECT_NAME} FILE ${PROJECT_NAME}Config.cmake)
 # SET UP [OPTIONAL] CODE EXAMPLES AND TESTS
 
 # Define some additional (optional) named targets, not built by default.  Typically, these will be e.g. unit tests, example executables.
+
+if(${BUILD_OPTIMIZATION_TESTS})
+    # Directory for built libraries
+    set(LIBRARY_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR}/lib CACHE PATH "The directory in which to place libraries built by this project")
+
+    # Directory for built executables
+    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR}/bin CACHE PATH "The directory in which to place executables built by this project")
+endif()
 
 # This is the name of the target in the generated Makefile that builds the example executables; i.e., to build these, one must type "make $EXAMPLES_TARGET_NAME" using the generated Makefile in order to build the example executables (we do this because we don't want these executables to be automatically built by other CMake projects that use this one as a dependency)
 if(${BUILD_OPTIMIZATION_EXAMPLES})
