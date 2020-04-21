@@ -34,10 +34,10 @@ template <typename X, typename Y> struct Pair : std::pair<X, Y> {
   Pair<X, Y> operator+(const Pair<X, Y> &v) const {
     Pair<X, Y> sum;
 
-    if (dim(Super::first) > 0)
+    if (Super::first.dim() > 0)
       sum.first = Super::first + v.first;
 
-    if (dim(Super::second) > 0)
+    if (Super::second.dim() > 0)
       sum.second = Super::second + v.second;
 
     return sum;
@@ -45,10 +45,10 @@ template <typename X, typename Y> struct Pair : std::pair<X, Y> {
 
   const Pair<X, Y> &operator+=(const Pair<X, Y> &v) {
 
-    if (dim(Super::first) > 0)
+    if (Super::first.dim() > 0)
       Super::first += v.first;
 
-    if (dim(Super::second) > 0)
+    if (Super::second.dim() > 0)
       Super::second += v.second;
 
     return *this;
@@ -58,10 +58,10 @@ template <typename X, typename Y> struct Pair : std::pair<X, Y> {
   Pair<X, Y> operator-(const Pair<X, Y> &v) const {
     Pair<X, Y> sum;
 
-    if (dim(Super::first) > 0)
+    if (Super::first.dim() > 0)
       sum.first = Super::first - v.first;
 
-    if (dim(Super::second) > 0)
+    if (Super::second.dim() > 0)
       sum.second = Super::second - v.second;
 
     return sum;
@@ -69,10 +69,10 @@ template <typename X, typename Y> struct Pair : std::pair<X, Y> {
 
   const Pair<X, Y> &operator-=(const Pair<X, Y> &v) {
 
-    if (dim(Super::first) > 0)
+    if (Super::first.dim() > 0)
       Super::first -= v.first;
 
-    if (dim(Super::second) > 0)
+    if (Super::second.dim() > 0)
       Super::second -= v.second;
 
     return *this;
@@ -81,9 +81,9 @@ template <typename X, typename Y> struct Pair : std::pair<X, Y> {
   // In-place scalar multiplication
   template <typename Scalar = double> const Pair<X, Y> &operator*=(Scalar s) {
 
-    if (dim(Super::first) > 0)
+    if (Super::first.dim() > 0)
       Super::first *= s;
-    if (dim(Super::second) > 0)
+    if (Super::second.dim() > 0)
       Super::second *= s;
 
     return *this;
@@ -91,20 +91,21 @@ template <typename X, typename Y> struct Pair : std::pair<X, Y> {
 
   // Unary negation operator
   Pair<X, Y> operator-() const {
-    return Pair<X, Y>(dim(Super::first) > 0 ? -Super::first : Super::first,
-                      dim(Super::second) > 0 ? -Super::second : Super::second);
+    return Pair<X, Y>(Super::first.dim() > 0 ? -Super::first : Super::first,
+                      Super::second.dim() > 0 ? -Super::second : Super::second);
   }
 
   // Inner product operator
-  template <typename Scalar = double> Scalar dot(const Pair<X, Y> &v) const {
-    return (dim(Super::first) > 0 ? inner_product(Super::first, v.first)
-                                  : Scalar(0)) +
-           (dim(Super::second) > 0 ? inner_product(Super::second, v.second)
-                                   : Scalar(0));
+  template <typename Scalar = double>
+  Scalar inner_product(const Pair<X, Y> &v) const {
+    return (Super::first.dim() > 0 ? v.first.inner_product(Super::first)
+                                   : Scalar(0)) +
+           (Super::second.dim() > 0 ? v.second.inner_product(Super::second)
+                                    : Scalar(0));
   }
 
   template <typename Scalar = double> Scalar norm() const {
-    return sqrt(dot(*this));
+    return sqrt(inner_product(*this));
   }
 };
 
@@ -115,10 +116,10 @@ template <typename X, typename Y, typename Scalar = double>
 Pair<X, Y> operator*(Scalar s, const Pair<X, Y> &x) {
   Pair<X, Y> prod;
 
-  if (dim(x.first) > 0)
+  if (x.first.dim() > 0)
     prod.first = s * x.first;
 
-  if (dim(x.second) > 0)
+  if (x.second.dim() > 0)
     prod.second = s * x.second;
 
   return prod;

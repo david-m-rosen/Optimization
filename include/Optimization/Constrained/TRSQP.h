@@ -279,17 +279,17 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
   Pair<EqVector, IneqVector> cx = c(x, args...);
 
   // Set of auxiliary slack variables for the inequality constraints (if any)
-  if (dim(cx.second) > 0) {
+  if (cx.second.dim() > 0) {
     // Initialize slack variables, ensuring that they are sufficiently
     // positive
-    s = max(-cx.second, params.s0_min);
+    s = (-cx.second).max(params.s0_min);
   }
 
   // Record problem dimensions
-  size_t n = dim(x);          // Number of primal variables
-  size_t me = dim(cx.first);  // Number of equality constraints
-  size_t mi = dim(cx.second); // Number of inequality constraints
-  size_t m = me + mi;         // Total number of constraints
+  size_t n = x.dim();          // Number of primal variables
+  size_t me = cx.first.dim();  // Number of equality constraints
+  size_t mi = cx.second.dim(); // Number of inequality constraints
+  size_t m = me + mi;          // Total number of constraints
 
   // Pair of Jacobians A(x) = (Ae(x), Ai(x)) of the  equality and inequality
   // constraints, respectively, at the current iterate x
@@ -384,7 +384,7 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
   //
   // with respect to x, evaluate at current primal-dual iterates (x, lambda)
   Vector gradLx = compute_gradLx(gradfx, lambda, Ax);
-  Scalar gradLx_norm = norm(gradLx);
+  Scalar gradLx_norm = gradLx.norm();
 
   // Norm of feasibility violation
   Scalar infeas_norm = compute_infeasibility(cx);
@@ -461,9 +461,10 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
 
     // Check whether the primal iterate x is an infeasible stationary point of
     // the infeasibility measure v(x) := |ce(x)|^2 + | [ci(x)]_{+} |^2
-    Scalar constraint_gradient_norm = norm(
+    Scalar constraint_gradient_norm =
         compute_infeasibility_gradient<Vector, EqVector, IneqVector, EqJacobian,
-                                       IneqJacobian, Scalar>(cx, Ax));
+                                       IneqJacobian, Scalar>(cx, Ax)
+            .norm();
 
     // Check for infeasible stationarity
     if ((infeas_norm > params.infeasibility_tolerance) &&
@@ -590,11 +591,11 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
 
       Pair<Vector, IneqVector> grad_varphi =
           compute_barrier_subproblem_objective_gradient(gradfx, s, mu);
-      Scalar grad_varphi_w = grad_varphi.dot(w);
+      Scalar grad_varphi_w = grad_varphi.inner_product(w);
 
-      Scalar wtWw =
-          w.dot(compute_barrier_subproblem_Hessian_of_Lagrangian_product(
-              HxL, Sigma, w));
+      Scalar wtWw = w.inner_product(
+          compute_barrier_subproblem_Hessian_of_Lagrangian_product(HxL, Sigma,
+                                                                   w));
 
       if ((grad_varphi_w <= 0) && (wtWw >= 0)) {
         // The tangential update step w is a valid descent direction for the
@@ -612,7 +613,7 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
 
         // Compute the inner product of the gradient grad_varphi(z) of the
         // barrier objective with the primal update step dz
-        Scalar grad_varphi_dz = grad_varphi.dot(dz);
+        Scalar grad_varphi_dz = grad_varphi.inner_product(dz);
 
         // Compute barrier residual norm
         Scalar cz_norm =
@@ -631,7 +632,7 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
           // "An Interior Algorithm for Nonlinear Optimization that Combines
           // Line-Search and Trust-Region Steps")
           Scalar nu_trial_numerator = grad_varphi_dz;
-          Scalar dztWdz = dz.dot(Wdz);
+          Scalar dztWdz = dz.inner_product(Wdz);
           if (dztWdz > 0)
             nu_trial_numerator += dztWdz / 2;
 
@@ -958,7 +959,7 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
         // If the second-order-corrected step still satisfies the
         // fraction-to-the-boundary condition for the slack variables
         // (if any) ...
-        if ((mi == 0) || min(zplus.second - (1 - params.tau) * s) >= 0) {
+        if ((mi == 0) || (zplus.second - (1 - params.tau) * s).min() >= 0) {
 
           // Re-evaluate the actual reduction in the merit function using
           // the updated trial point
@@ -991,7 +992,7 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
     }   // Byrd-Omojokun composite step computation
 
     // Compute norm of primal updates step dx
-    Scalar dx_norm = norm(d.first);
+    Scalar dx_norm = d.first.norm();
 
     /// Display output to user, if requested
 
@@ -1095,7 +1096,7 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
       Sigma = compute_Sigma(s, lambda.second, mu);
 
       // Update KKT residuals at new trial point
-      gradLx_norm = norm(gradLx);
+      gradLx_norm = gradLx.norm();
       infeas_norm = compute_infeasibility(cx);
       KKT_complementarity_error =
           compute_barrier_subproblem_complementarity_error<IneqVector, Scalar>(

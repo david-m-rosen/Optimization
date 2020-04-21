@@ -73,7 +73,7 @@ compute_Ahat_product(const Pair<EqJacobian, IneqJacobian> &Ax,
                      const IneqVector &s, const Pair<Vector, IneqVector> &v) {
   return Pair<EqVector, IneqVector>(
       Ax.first.rows() > 0 ? Ax.first * v.first : EqVector(),
-      Ax.second.rows() > 0 ? Ax.second * v.first + hadamard_product(s, v.second)
+      Ax.second.rows() > 0 ? Ax.second * v.first + s.hadamard_product(v.second)
                            : IneqVector());
 }
 
@@ -90,12 +90,12 @@ Vector compute_At_product(const Pair<EqJacobian, IneqJacobian> &Ax,
 
   Vector Atv;
 
-  if ((dim(v.first) > 0) && (dim(v.second) > 0)) {
-    Atv = transpose(Ax.first) * v.first + transpose(Ax.second) * v.second;
-  } else if ((dim(v.first) > 0) && (dim(v.second) == 0)) {
-    Atv = transpose(Ax.first) * v.first;
-  } else if ((dim(v.first) == 0) && (dim(v.second) > 0)) {
-    Atv = transpose(Ax.second) * v.second;
+  if ((v.first.dim() > 0) && (v.second.dim() > 0)) {
+    Atv = Ax.first.transpose() * v.first + Ax.second.transpose() * v.second;
+  } else if ((v.first.dim() > 0) && (v.second.dim() == 0)) {
+    Atv = Ax.first.transpose() * v.first;
+  } else if ((v.first.dim() == 0) && (v.second.dim() > 0)) {
+    Atv = Ax.second.transpose() * v.second;
   }
 
   return Atv;
@@ -151,7 +151,7 @@ compute_Ahat_transpose_product(const Pair<EqJacobian, IneqJacobian> &Ax,
   return Pair<Vector, IneqVector>(
       compute_At_product<Vector, EqVector, IneqVector, EqJacobian,
                          IneqJacobian>(Ax, v),
-      (dim(s) > 0 ? hadamard_product(s, v.second) : IneqVector()));
+      (s.dim() > 0 ? s.hadamard_product(v.second) : IneqVector()));
 }
 
 /** Given:
@@ -197,7 +197,7 @@ Scalar compute_barrier_subproblem_complementarity_error(
   Scalar squared_error = 0;
   Scalar r;
 
-  for (size_t k = 0; k < dim(s); ++k) {
+  for (size_t k = 0; k < s.dim(); ++k) {
     r = s(k) * lambda_i(k) - mu;
     squared_error += r * r;
   }
@@ -217,7 +217,7 @@ template <typename EqVector, typename IneqVector>
 Pair<EqVector, IneqVector>
 compute_constraint_residuals(const Pair<EqVector, IneqVector> &cx) {
   return Pair<EqVector, IneqVector>(
-      cx.first, (dim(cx.second) > 0 ? max(cx.second, 0) : cx.second));
+      cx.first, (cx.second.dim() > 0 ? cx.second.max(0) : cx.second));
 }
 
 /** Given:
@@ -235,7 +235,7 @@ template <typename EqVector, typename IneqVector>
 Pair<EqVector, IneqVector> compute_barrier_subproblem_constraint_residuals(
     const Pair<EqVector, IneqVector> &cx, const IneqVector &s) {
   return Pair<EqVector, IneqVector>(
-      cx.first, (dim(cx.second) > 0 ? cx.second + s : cx.second));
+      cx.first, (cx.second.dim() > 0 ? cx.second + s : cx.second));
 }
 
 /** Given the value of the constraint function c(x) = (ce(x), ci(x)) at the
@@ -312,7 +312,7 @@ template <typename Vector, typename EqVector, typename IneqVector,
 Scalar compute_barrier_subproblem_KKT_residual(
     const Vector &gradLx, const Pair<EqVector, IneqVector> &cx,
     const IneqVector &s, const IneqVector &lambda_i, Scalar mu) {
-  Scalar gradLx_norm = norm(gradLx);
+  Scalar gradLx_norm = gradLx.norm();
   Scalar infeas_norm =
       compute_barrier_subproblem_constraint_residuals(cx, s).norm();
   Scalar comp_err =
@@ -340,9 +340,9 @@ Scalar compute_barrier_subproblem_KKT_residual(
 template <typename IneqVector, typename Scalar = double>
 IneqVector compute_Sigma(const IneqVector &s, const IneqVector &lambda_i,
                          Scalar mu) {
-  if (dim(s) > 0) {
+  if (s.dim() > 0) {
     IneqVector Sigma = s;
-    for (size_t k = 0; k < dim(s); ++k)
+    for (size_t k = 0; k < s.dim(); ++k)
       Sigma(k) = (lambda_i(k) > 0 ? lambda_i(k) / s(k) : mu / ((s(k) * s(k))));
     return Sigma;
   } else
@@ -372,7 +372,7 @@ IneqVector compute_Sigma(const IneqVector &s, const IneqVector &lambda_i,
  */
 template <typename IneqVector>
 IneqVector reset_slacks(const IneqVector &s, const IneqVector &cix) {
-  return max(s, -cix);
+  return s.max(-cix);
 }
 
 /** Given:
@@ -387,7 +387,7 @@ IneqVector reset_slacks(const IneqVector &s, const IneqVector &cix) {
 template <typename IneqVector, typename Scalar = double>
 Scalar compute_maximum_admissible_steplength(const IneqVector &s,
                                              const IneqVector &ds, Scalar tau) {
-  if ((dim(s) == 0) || (min(ds) >= 0)) {
+  if ((s.dim() == 0) || (ds.min() >= 0)) {
     // If all elements of ds are positive, then no point along the ray s +
     // alpha ds will will intersect the boundary of the nonnegative orthant, so
     // return the full steplength 1
@@ -402,10 +402,10 @@ Scalar compute_maximum_admissible_steplength(const IneqVector &s,
 
     // Extract and return the *minimum positive* element of -tau*s / ds
     IneqVector neg_tau_s_over_ds =
-        hadamard_product(-tau * s, hadamard_inverse(ds));
+        -tau * s.hadamard_product(ds.hadamard_inverse());
 
     Scalar max_steplength_to_boundary = std::numeric_limits<Scalar>::max();
-    for (size_t k = 0; k < dim(s); ++k)
+    for (size_t k = 0; k < s.dim(); ++k)
       if (neg_tau_s_over_ds(k) > 0)
         max_steplength_to_boundary =
             std::min<Scalar>(max_steplength_to_boundary, neg_tau_s_over_ds(k));
@@ -429,11 +429,11 @@ template <typename Vector, typename IneqVector, typename Scalar = double>
 Scalar compute_trust_region_norm(const Pair<Vector, IneqVector> &v,
                                  const IneqVector &s) {
   Scalar squared_norm = 0;
-  if (dim(v.first) > 0)
-    squared_norm += std::pow(norm(v.first), 2);
-  if (dim(v.second) > 0)
+  if (v.first.dim() > 0)
+    squared_norm += std::pow(v.first.norm(), 2);
+  if (v.second.dim() > 0)
     squared_norm +=
-        std::pow(norm(hadamard_product(v.second, hadamard_inverse(s))), 2);
+        std::pow(v.second.hadamard_product(s.hadamard_inverse()).norm(), 2);
 
   return sqrt(squared_norm);
 }
@@ -508,7 +508,7 @@ Scalar evaluate_barrier_subproblem_objective(Scalar fx, const IneqVector &s,
   Scalar varphi = fx;
 
   // Logarithmic barrier term
-  for (size_t k = 0; k < dim(s); ++k)
+  for (size_t k = 0; k < s.dim(); ++k)
     varphi -= mu * log(s(k));
 
   return varphi;
@@ -530,7 +530,7 @@ Pair<Vector, IneqVector>
 compute_barrier_subproblem_objective_gradient(const Vector &gradfx,
                                               const IneqVector &s, Scalar mu) {
 
-  return Pair<Vector, IneqVector>(gradfx, -mu * hadamard_inverse(s));
+  return Pair<Vector, IneqVector>(gradfx, -mu * s.hadamard_inverse());
 }
 
 /** Given:
@@ -597,7 +597,7 @@ compute_barrier_subproblem_Hessian_of_Lagrangian_product(
   Pair<Vector, IneqVector> Wv;
 
   return Pair<Vector, IneqVector>(HxL * v.first,
-                                  hadamard_product(Sigma, v.second));
+                                  Sigma.hadamard_product(v.second));
 }
 
 /** Given:
@@ -625,9 +625,11 @@ Scalar evaluate_quadratic_model(const Pair<Vector, IneqVector> &d,
                                 const Hessian &HxL, const IneqVector &Sigma,
                                 Scalar mu) {
 
-  return d.dot(compute_barrier_subproblem_objective_gradient(gradfx, s, mu)) +
-         .5 * d.dot(compute_barrier_subproblem_Hessian_of_Lagrangian_product(
-                  HxL, Sigma, d));
+  return d.inner_product(
+             compute_barrier_subproblem_objective_gradient(gradfx, s, mu)) +
+         .5 * d.inner_product(
+                  compute_barrier_subproblem_Hessian_of_Lagrangian_product(
+                      HxL, Sigma, d));
 }
 
 /** Given:

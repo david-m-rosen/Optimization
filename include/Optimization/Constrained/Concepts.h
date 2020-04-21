@@ -37,13 +37,38 @@
  *
  * Each of Vector, EqVector and IneqVector must model elements of an inner
  * product space; in particular, this means that they must support operations of
- * addition, subtraction, and scalar multiplication
+ * addition, subtraction, and scalar multiplication.  In addition, these types T
+ * must implement member functions matching the following signatures:
+ *
+ *     - size_t dim() const:  Return the dimension of the vector (must return
+ *       0 if vector is empty or unintialized)
+ *
+ *     - Scalar max() const:  Return the maximum element of the vector
+ *
+ *     - T max(const Scalar & s) const:  Return the vector whose ith
+ *       element is given by max(*this_i, s)
+ *
+ *     - T max(const T& w) const:  Return the vector whose ith element
+ *       is max(*this_i, w_i)
+ *
+ *     - Scalar min() const:  Return the minimum element of the vector
+ *
+ *     - T hadamard_product(const T& w) const:  Return the Hadamard
+ *       (elementwise) product of *this and w
+ *
+ *     - T hadamard_inverse() const:  Return the Hadamard (elementwise)
+ *       multiplicative inverse of the vector
+ *
+ *     - Scalar inner_product(const T& w):  Return the inner product of *this
+ *       and w
+ *
+ *     - Scalar norm() const:  Return the norm of the vector
  *
  * - EqJacobian and IneqJacobian are types that are used to represent the
  *   Jacobians (derivatives) of the EqVector- and IneqVector-valued equality and
  *   inequality constraint functions, respectively.  These types must support
- *   operations of transposition and multiplication with EqVectors and
- *   IneqVectors, respectively
+ *   operations of multiplication with EqVectors and IneqVectors, respectively,
+ *   and a transpose() method.
  *
  * - Hessian is the type used to represent the (symmetric) Hessian of the
  *   Lagrangian L(x, lambda) := f(x) + <lambda_e, ce(x)> + <lambda_i, ci(x)>

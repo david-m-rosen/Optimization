@@ -83,7 +83,7 @@ Pair<EqVector, IneqVector> update_Lagrange_multipliers(
 
   // Construct vector mu*e
   IneqVector mue = s;
-  for (size_t k = 0; k < dim(s); ++k)
+  for (size_t k = 0; k < s.dim(); ++k)
     mue(k) = mu;
 
   Pair<EqVector, IneqVector> b =
@@ -93,8 +93,8 @@ Pair<EqVector, IneqVector> update_Lagrange_multipliers(
 
   // Set second block to appropriate-sized vectors of zero
   Pair<EqVector, IneqVector> zero_vec(
-      dim(lambda.first) > 0 ? 0 * lambda.first : EqVector(),
-      dim(lambda.second) > 0 ? 0 * lambda.second : IneqVector());
+      lambda.first.dim() > 0 ? 0 * lambda.first : EqVector(),
+      lambda.second.dim() > 0 ? 0 * lambda.second : IneqVector());
 
   // Primal part of solution vector
   Pair<Vector, IneqVector> v;
@@ -192,7 +192,7 @@ Pair<EqVector, IneqVector> compute_normal_step(
   /// - Elementwise slack positivity constraint vN,s >= -tau/2
 
   // Most-negative component of vN,s (if any)
-  Scalar vNs_min = (dim(vN.second) > 0 ? min(vN.second) : 0);
+  Scalar vNs_min = (vN.second.dim() > 0 ? vN.second.min() : 0);
 
   // Longest steplength that can be taken before violating
   // theta * vN,s >= -tau/2
@@ -249,9 +249,9 @@ Pair<EqVector, IneqVector> compute_normal_step(
       // Compute maximum value of theta2 satisfying the trust-region
       // constraint
       // || vC + theta*d || <=
-      Scalar vCd = vC.dot(d);
+      Scalar vCd = vC.inner_product(d);
       Scalar vC2 = vC_norm * vC_norm;
-      Scalar d2 = d.dot(d);
+      Scalar d2 = d.inner_product(d);
 
       Scalar theta2_max =
           (-vCd + sqrt(vCd * vCd + d2 * (DeltaBar * DeltaBar - vC2))) / d2;
@@ -260,7 +260,7 @@ Pair<EqVector, IneqVector> compute_normal_step(
 
       // Ensure that this step maintains sufficient positivity of the
       // resulting auxiliary slack variables, if any
-      for (size_t k = 0; k < dim(s); ++k) {
+      for (size_t k = 0; k < s.dim(); ++k) {
         Scalar q = (-vC.second(k) - tau / 2) / d.second(k);
         if (d.second(k) > 0)
           theta2_min = std::max(theta2_min, q);
@@ -281,7 +281,7 @@ Pair<EqVector, IneqVector> compute_normal_step(
     } else {
       /// Find theta3 := max{ theta in (0, 1] | theta3*vC is feasible }
       // Most-negative component of vN,s (if any)
-      Scalar vCs_min = (dim(s) > 0 ? min(vC.second) : 0);
+      Scalar vCs_min = (s.dim() > 0 ? vC.second.min() : 0);
 
       // Longest steplength that can be taken before violating vC,s >= -tau/2
       Scalar theta3_s = (vCs_min < 0 ? -tau / (2 * vCs_min)
@@ -311,8 +311,8 @@ Pair<EqVector, IneqVector> compute_normal_step(
   /// Extract and return *UNSCALED* normal step v = (vx, vs)
 
   return Pair<Vector, IneqVector>(
-      vtilde.first, (dim(vtilde.second) > 0 ? hadamard_product(s, vtilde.second)
-                                            : vtilde.second));
+      vtilde.first, (vtilde.second.dim() > 0 ? s.hadamard_product(vtilde.second)
+                                             : vtilde.second));
 }
 
 /** This functions compute a tangential update step:
@@ -402,8 +402,8 @@ Pair<Vector, IneqVector> compute_tangential_step(
 
   /// Construct SCALED normal slack updates vtilde = (vx, s^-1 * vs)
   IneqVector vtilde_s =
-      (dim(v.second) > 0 ? hadamard_product(v.second, hadamard_inverse(s))
-                         : v.second);
+      (v.second.dim() > 0 ? v.second.hadamard_product(s.hadamard_inverse())
+                          : v.second);
 
   /// Construct elements of the tangential step subproblem defined in eqs.
   /// (3.34)--(3.38) in the paper
@@ -411,26 +411,26 @@ Pair<Vector, IneqVector> compute_tangential_step(
   /// Construct 2nd (diagonal) block of Hessian matrix G:
   /// S * Sigma * S
   IneqVector SSigmaS =
-      (dim(s) > 0 ? hadamard_product(s, hadamard_product(s, Sigmas)) : s);
+      (s.dim() > 0 ? s.hadamard_product(Sigmas.hadamard_product(s)) : s);
 
   /// Construct gradient vector g = (gradfx + H*vx, -mu*e + SSigmaS*vtilde_s)
   Primal g(gradfx + H * v.first,
-           dim(s) > 0 ? hadamard_product(SSigmaS, vtilde_s) : s);
-  for (size_t k = 0; k < dim(s); ++k)
+           s.dim() > 0 ? SSigmaS.hadamard_product(vtilde_s) : s);
+  for (size_t k = 0; k < s.dim(); ++k)
     g.second(k) -= mu;
 
   /// Set up stuff required functions for STPCG!
   Optimization::LinearAlgebra::InnerProduct<Primal, Scalar>
       STPCG_inner_product = [](const Primal &v1, const Primal &v2) {
         // Just use the standard Eigen inner product for vectors
-        return v1.dot(v2);
+        return v1.inner_product(v2);
       };
 
   /// Construct Hessian operator G
   Optimization::LinearAlgebra::SymmetricLinearOperator<Primal> Gop =
       [&H, &SSigmaS](const Primal &v) -> Primal {
-    return Primal(H * v.first, dim(v.second) > 0
-                                   ? hadamard_product(SSigmaS, v.second)
+    return Primal(H * v.first, v.second.dim() > 0
+                                   ? SSigmaS.hadamard_product(v.second)
                                    : v.second);
   };
 
@@ -487,7 +487,7 @@ Pair<Vector, IneqVector> compute_tangential_step(
 
   // Vector of lower-bounds on the right-hand side of  inequality  (3.38)
   IneqVector l = -vtilde_s;
-  for (size_t k = 0; k < dim(s); ++k)
+  for (size_t k = 0; k < s.dim(); ++k)
     l(k) -= tau;
 
   Optimization::LinearAlgebra::STPCGUserFunction<Primal, Dual> user_func =
@@ -503,7 +503,7 @@ Pair<Vector, IneqVector> compute_tangential_step(
           const Primal &pk, Scalar alpha_k) {
         // If there are slack variables in the current problem, and the
         // current iterate sk satisfies the slack bound (3.38)
-        if (dim(sk.second) > 0 && min(sk.second - l) >= 0) {
+        if (sk.second.dim() > 0 && (sk.second - l).min() >= 0) {
           // Record current iterate sk and search direction wk
           wtilde = sk;
           p = pk;
@@ -524,14 +524,14 @@ Pair<Vector, IneqVector> compute_tangential_step(
   /// Extract and return final UNSCALED tangential update
   Primal w; // Final output
 
-  if (dim(s) > 0) {
+  if (s.dim() > 0) {
     // If inequality constraints are present, check whether the final iterate
     // returend by STPCG satisfies the bound (3.38)
-    if (min(wplus.second - l) >= 0) {
+    if ((wplus.second - l).min() >= 0) {
       // Final STPCG iterate satisfies the bound (3.38), so use this solution
       w.first = wplus.first;
       w.second =
-          hadamard_product(s, wplus.second); // Return UNSCALED slack update
+          s.hadamard_product(wplus.second); // Return UNSCALED slack update
     } else {
       // Final STPCG iterate was *NOT* feasible.  Following "PCG Procedure",
       // extract the last feasible iterate wtilde and its corresponding search
@@ -539,16 +539,16 @@ Pair<Vector, IneqVector> compute_tangential_step(
       // wtilde + alpha*p is feasible
 
       // Compute maximum admissible steplength for the trust-region constraint
-      Scalar wtilde_p = wtilde.dot(p);
-      Scalar wtilde_2 = wtilde.dot(wtilde);
-      Scalar p2 = p.dot(p);
+      Scalar wtilde_p = wtilde.inner_product(p);
+      Scalar wtilde_2 = wtilde.inner_product(wtilde);
+      Scalar p2 = p.inner_product(p);
       Scalar alpha = (-wtilde_p + sqrt(wtilde_p * wtilde_p +
                                        p2 * (DeltaTan * DeltaTan - wtilde_2))) /
                      p2;
 
       // Compute maximum admissible steplength for the slack inequality
       // constraints
-      for (size_t k = 0; k < dim(s); ++k) {
+      for (size_t k = 0; k < s.dim(); ++k) {
         if (p.second(k) < 0) {
           // If p(n+k) < 0, compute the maximum steplength such that
           // wtilde(n+k) + alpha * p(n+k) >= l(k)
@@ -558,7 +558,7 @@ Pair<Vector, IneqVector> compute_tangential_step(
 
       // Set w = wtilde + alpha * p
       w.first = wtilde.first + alpha * p.first;
-      w.second = hadamard_product(s, wtilde.second + alpha * p.second);
+      w.second = s.hadamard_product(wtilde.second + alpha * p.second);
     }
   } else {
     w.first = wplus.first;

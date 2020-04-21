@@ -35,6 +35,7 @@ set(TEST_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/IterativeSolvers_unit_test.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/GradientDescent_unit_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/TRSQPEigenExtensions_unit_test.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/TRSQP_unit_test.cpp)
 
 # INDIVIDUAL UNIT TESTS
@@ -48,13 +49,14 @@ target_link_libraries(TNT_unit_test Optimization gtest_main)
 add_executable(GradientDescent_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/GradientDescent_unit_test.cpp)
 target_link_libraries(GradientDescent_unit_test Optimization gtest_main)
 
+add_executable(TRSQPEigenExtensionsTest ${CMAKE_CURRENT_SOURCE_DIR}/TRSQPEigenExtensions_unit_test.cpp)
+target_link_libraries(TRSQPEigenExtensionsTest Optimization gtest_main)
+
 add_executable(TRSQP_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/TRSQP_unit_test.cpp)
 target_link_libraries(TRSQP_unit_test Optimization ${UMFPACK_LIBRARIES} gtest_main)
 
 # RUN ALL UNIT TESTS
 add_executable(RunAllUnitTests ${TEST_SRCS})
 target_link_libraries(RunAllUnitTests Optimization ${UMFPACK_LIBRARIES} gtest_main)
-
-
 
 

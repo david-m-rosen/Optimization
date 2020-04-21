@@ -12,7 +12,7 @@
  * "Optimization Algorithms on Matrix Manifolds" by Absil, Mahoney, and
  *  Sepulchre
  *
- * Copyright (C) 2017 - 2018 by David M. Rosen (dmrosen@mit.edu)
+ * Copyright (C) 2017 - 2020 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once

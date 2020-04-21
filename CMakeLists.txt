@@ -47,6 +47,7 @@ set(OPTIMIZATION_HDRS
     ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQPUtilityFunctions.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQPSubproblemSolvers.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQP.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQPEigenExtensions.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/Concepts.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/ProximalGradient.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/ADMM.h

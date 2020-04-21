@@ -17,10 +17,17 @@
  *     [-1.0314]
  */
 
+// Add definitions from TRSQPEigenExtensions to the Eigen MatrixBase class
+// Note that THIS PREPROCESSOR COMMAND MUST PRECEDE ANY EIGEN HEADERS
+#define EIGEN_MATRIXBASE_PLUGIN                                                \
+  "Optimization/Constrained/TRSQPEigenExtensions.h"
+
 #include <Eigen/Dense>
 #include <Eigen/QR>
 #include <Eigen/Sparse>
 #include <gtest/gtest.h>
+
+#include "Optimization/Constrained/TRSQP.h"
 
 /// Some useful typedefs
 
@@ -30,55 +37,6 @@ typedef Eigen::VectorXd Vector;
 typedef Eigen::MatrixXd Matrix;
 typedef Eigen::SparseMatrix<double> SparseMatrix;
 
-/// A few small helper functions that are needed to instantiate the TRSQP
-/// template functions
-
-// Dimension of a Vector
-size_t dim(const Vector &x) { return x.size(); }
-
-// Elementwise maximum between a Vector and a Scalar
-Vector max(const Vector &x, Scalar v) {
-  return x.cwiseMax(Vector::Constant(x.size(), v));
-}
-
-// Elementwise minimum between a Vector and a Scalar
-Vector min(const Vector &x, Scalar v) {
-  return x.cwiseMin(Vector::Constant(x.size(), v));
-}
-
-// Minimum element of a Vector
-Scalar min(const Vector &x) { return x.minCoeff(); }
-
-// Maximum element of a Vector
-Scalar max(const Vector &x) { return x.maxCoeff(); }
-
-// Elementwise maximum between two vectors
-Vector max(const Vector &x, const Vector &y) { return x.cwiseMax(y); }
-
-// Hadamard (elementwise) product between two vectors
-Vector hadamard_product(const Vector &x, const Vector &y) {
-  return x.cwiseProduct(y);
-}
-
-// Hadamard (elementwise) inverse of a vector
-Vector hadamard_inverse(const Vector &x) { return x.cwiseInverse(); }
-
-// Elementwise inverse
-
-// Inner product of two vectors
-Scalar inner_product(const Vector &x, const Vector &y) { return x.dot(y); }
-
-// Norm of a Vector
-Scalar norm(const Vector &x) { return x.norm(); }
-
-// Transpose of a SparseMatrix
-auto transpose = [](const SparseMatrix &X) { return X.transpose(); };
-
-/// END HELPER FUNCTIONS
-
-/// NOW include the template definitions
-
-#include "Optimization/Constrained/TRSQP.h"
 using namespace Optimization;
 using namespace Constrained;
 typedef Optimization::Constrained::Pair<Vector, Vector> VectorPair;
