@@ -711,8 +711,8 @@ Pair<EqVector, IneqVector> compute_gradient_of_multiplier_loss(
 
   // Construct constant vector [grafx, -mu*e]
   Pair<EqVector, IneqVector> b(gradfx, s);
-  if (dim(s) > 0)
-    for (size_t k = 0; k < dim(s); ++k)
+  if (s.dim() > 0)
+    for (size_t k = 0; k < s.dim(); ++k)
       b.second(k) = -mu;
 
   // Compute residual r := Ahat'*lambda + b

@@ -841,7 +841,8 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
       // Verify that the normal update step satisfies the
       // fraction-to-the-boundary rule (3.19), if inequality constraints
       // are present
-      assert((mi > 0 ? (min(v.second + (params.tau / 2) * s) >= -1e-8) : true));
+      assert(
+          (mi > 0 ? ((v.second + (params.tau / 2) * s).min() >= -1e-8) : true));
 
       /// Compute tangential update step
       Scalar tangential_step_M_norm;
@@ -871,7 +872,7 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
       // Verify that the tangential update step satisfies the
       // fraction-to-the-boundary rule (3.29), if inequality constraints
       // are present
-      assert((mi > 0 ? (min(v.second + w.second + params.tau * s) >= -1e-8)
+      assert((mi > 0 ? ((v.second + w.second + params.tau * s).min() >= -1e-8)
                      : true));
 
       /// Compute composite update step
