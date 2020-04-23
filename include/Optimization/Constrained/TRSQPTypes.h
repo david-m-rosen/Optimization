@@ -284,11 +284,20 @@ using AugmentedSystemSolverFunction = std::function<void(
  *   primal variables
  * - y = (ye, yi) is the part of the solution corresponding to the Lagrange
  *   multipliers associated with the equality and inequality constraints.
+ *
+ * Note that the passed primal-dual system matrix is NOT guaranteed to be
+ * nonsingular (in which case the desired primal-dual update step (v, y) may not
+ * exist); this function should explicitly check the input primal-dual system
+ * for possible ill-conditioning or singularity.
+ *
+ * This function should return 'true' if the KKT system was successfully solved,
+ * or 'false' otherwise (in which case the primal and dual solutions v and y are
+ * not required to be set).
  */
 template <typename Vector, typename EqVector, typename IneqVector,
           typename EqJacobian, typename IneqJacobian, typename Hessian,
           typename... Args>
-using KKTSystemSolverFunction = std::function<void(
+using KKTSystemSolverFunction = std::function<bool(
     const Hessian &HxL, const IneqVector &Sigma,
     const Pair<EqJacobian, IneqJacobian> &Ax, bool new_coefficient_matrix,
     const Pair<Vector, IneqVector> &b, const Pair<EqVector, IneqVector> &c,

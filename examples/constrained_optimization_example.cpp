@@ -116,7 +116,7 @@ KKTSystemFunction kkt_system_solver =
        const Optimization::Constrained::Pair<Vector, Vector> &b,
        const Optimization::Constrained::Pair<Vector, Vector> &c,
        Optimization::Constrained::Pair<Vector, Vector> &v,
-       Optimization::Constrained::Pair<Vector, Vector> &y) -> void {
+       Optimization::Constrained::Pair<Vector, Vector> &y) -> bool {
   /// Get problem size
   size_t n = b.first.size();
   size_t me = c.first.size();
@@ -168,6 +168,10 @@ KKTSystemFunction kkt_system_solver =
              Kfact.eigenvalues().cwiseInverse().asDiagonal() *
              Kfact.eigenvectors().transpose() * rhs;
 
+  /// VERIFY STEP COMPUTATION SUCCEEDED
+  if ((K * x - rhs).norm() > 1e-6 * std::max(1.0, rhs.norm()))
+    return false;
+
   /// Extract and return solution components
   v.first = x.head(n);
 
@@ -177,6 +181,8 @@ KKTSystemFunction kkt_system_solver =
     y.first = x.segment(n + mi, me);
   if (mi > 0)
     y.second = x.segment(n + me + mi, mi);
+
+  return true;
 };
 
 PDStrategyFunction pd_strategy =

@@ -568,7 +568,7 @@ Pair<Vector, IneqVector> compute_tangential_step(
   return w;
 }
 
-/** This function computes and returns the normal and tangential components of a
+/** This function computes and the normal and tangential components of a
  * primal-dual Newton update step for the KKT system of the barrier subproblem.
  *
  * Arguments:
@@ -635,11 +635,19 @@ Pair<Vector, IneqVector> compute_tangential_step(
  *     L(z, lambda) := f(x) - mu sum_i log(s_i) + lambda'c(z)
  *
  *     is the Lagrangian of the barrier subproblem
+ *
+ * Note that the passed primal-dual system matrix is NOT guaranteed to be
+ * nonsingular (in which case the desired normal and tangential updates v and w
+ * may not exist).  This function explicitly checks whether the primal-dual
+ * system was successfully solved for the normal and tangential step components:
+ * it returns 'true' if the KKT systems were solved successfully, and 'false'
+ * otherwise (in which case the normal and tangential steps v and w and not
+ * set).
  */
 template <typename Vector, typename EqVector, typename IneqVector,
           typename EqJacobian, typename IneqJacobian, typename Hessian,
           typename Scalar = double, typename... Args>
-void compute_primal_dual_update_components(
+bool compute_primal_dual_update_components(
     const Pair<EqVector, IneqVector> &cx, const IneqVector &s,
     const Vector &gradfx, const Pair<EqJacobian, IneqJacobian> &Ax,
     const Pair<EqVector, IneqVector> &lambda, const Hessian &H,
@@ -660,12 +668,16 @@ void compute_primal_dual_update_components(
       compute_barrier_subproblem_constraint_residuals(cx, s);
 
   // Compute components of normal update step
-  kkt_system_solver(H, Sigma, Ax, new_kkt_system_matrix, 0 * gradLz, -cz, v_z,
-                    v_lambda, args...);
+  if (!kkt_system_solver(H, Sigma, Ax, new_kkt_system_matrix, 0 * gradLz, -cz,
+                         v_z, v_lambda, args...))
+    return false;
 
   // Compute components of tangential update step
-  kkt_system_solver(H, Sigma, Ax, false, -gradLz, 0 * cz, w_z, w_lambda,
-                    args...);
+  if (!kkt_system_solver(H, Sigma, Ax, false, -gradLz, 0 * cz, w_z, w_lambda,
+                         args...))
+    return false;
+
+  return true;
 }
 
 } // namespace Constrained

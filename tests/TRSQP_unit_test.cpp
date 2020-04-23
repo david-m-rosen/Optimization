@@ -274,7 +274,7 @@ protected:
            const Pair<SparseMatrix, SparseMatrix> &Ax,
            bool new_coefficient_matrix, const Pair<Vector, Vector> &b,
            const Pair<Vector, Vector> &c, Pair<Vector, Vector> &v,
-           Pair<Vector, Vector> &y) -> void {
+           Pair<Vector, Vector> &y) -> bool {
       /// Get problem size
       size_t n = b.first.size();
       size_t me = c.first.size();
@@ -326,6 +326,10 @@ protected:
                  Kfact.eigenvalues().cwiseInverse().asDiagonal() *
                  Kfact.eigenvectors().transpose() * rhs;
 
+      /// VERIFY STEP COMPUTATION SUCCEEDED
+      if ((K * x - rhs).norm() > 1e-6 * std::max(1.0, rhs.norm()))
+        return false;
+
       /// Extract and return solution components
       v.first = x.head(n);
 
@@ -335,6 +339,8 @@ protected:
         y.first = x.segment(n + mi, me);
       if (mi > 0)
         y.second = x.segment(n + me + mi, mi);
+
+      return true;
     };
 
     pd_strategy = [](size_t k, double t, const Vector &x, const Vector &s,

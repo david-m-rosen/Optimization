@@ -505,240 +505,175 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
 
     /// COMPUTE UPDATE STEP
 
-    // Boolean value indicating whether a primal-dual update step should be
-    // attempted
-    bool attempt_primal_dual_step =
-        (primal_dual_strategy &&
-         (*primal_dual_strategy)(k, elapsed_time, x, s, lambda, fx, gradfx, HxL,
-                                 Sigma, cx, Ax, mu, Delta, step_type,
-                                 num_STPCG_iters, d, step_accepted, args...));
-
     // Reset status flags
     num_STPCG_iters = 0;
     num_pd_linesearch_iters = 0;
     SOC_applied = false;
     step_accepted = false;
 
-    /// PRIMAL-DUAL STEP COMPUTATION
+    // Boolean value indicating whether a primal-dual update step should be
+    // attempted
+    if (primal_dual_strategy &&
+        (*primal_dual_strategy)(k, elapsed_time, x, s, lambda, fx, gradfx, HxL,
+                                Sigma, cx, Ax, mu, Delta, step_type,
+                                num_STPCG_iters, d, step_accepted, args...)) {
 
-    if (attempt_primal_dual_step) {
+      /// PRIMAL-DUAL STEP COMPUTATION
 
       // Dual components of normal and tangential updates
       Pair<EqVector, IneqVector> v_lambda, w_lambda;
+      bool pd_comp_success = false;
 
-      compute_primal_dual_update_components<Vector, EqVector, IneqVector,
-                                            EqJacobian, IneqJacobian, Hessian,
-                                            Scalar, Args...>(
-          cx, s, gradfx, Ax, lambda, HxL, Sigma, mu, !PD_system_is_current,
-          *kkt_system_solver, v, v_lambda, w, w_lambda, args...);
-
+      pd_comp_success =
+          compute_primal_dual_update_components<Vector, EqVector, IneqVector,
+                                                EqJacobian, IneqJacobian,
+                                                Hessian, Scalar, Args...>(
+              cx, s, gradfx, Ax, lambda, HxL, Sigma, mu, !PD_system_is_current,
+              *kkt_system_solver, v, v_lambda, w, w_lambda, args...);
       PD_system_is_current = true;
 
-      // Assertion checking: verify that the returned normal and tangential step
-      // components satisfy their defining equations
+      if (pd_comp_success) {
 
-      // Normal step: W*v_z + Abar'*v_lambda = 0
-      assert((compute_barrier_subproblem_Hessian_of_Lagrangian_product(
-                  HxL, Sigma, v) +
-              compute_Abar_transpose_product<Vector, EqVector, IneqVector,
-                                             EqJacobian, IneqJacobian>(
-                  Ax, v_lambda))
-                 .norm() <
-             1e-6 * std::max(1.0, sqrt(std::pow(v.norm(), 2) +
-                                       std::pow(v_lambda.norm(), 2))));
+        /// ASSERTION CHECKING: Verify that the returned normal and tangential
+        /// step components satisfy their defining equations
 
-      // Normal step:   Abar*v_z + c(z) = 0
-      assert((compute_Abar_product<Vector, EqVector, IneqVector, EqJacobian,
-                                   IneqJacobian>(Ax, v) +
-              compute_barrier_subproblem_constraint_residuals(cx, s))
-                 .norm() <
-             1e-6 *
-                 std::max(1.0,
+        // Normal step: W*v_z + Abar'*v_lambda = 0
+        assert((compute_barrier_subproblem_Hessian_of_Lagrangian_product(
+                    HxL, Sigma, v) +
+                compute_Abar_transpose_product<Vector, EqVector, IneqVector,
+                                               EqJacobian, IneqJacobian>(
+                    Ax, v_lambda))
+                   .norm() <
+               1e-6 * std::max(1.0, sqrt(std::pow(v.norm(), 2) +
+                                         std::pow(v_lambda.norm(), 2))));
+
+        // Normal step:   Abar*v_z + c(z) = 0
+        assert((compute_Abar_product<Vector, EqVector, IneqVector, EqJacobian,
+                                     IneqJacobian>(Ax, v) +
+                compute_barrier_subproblem_constraint_residuals(cx, s))
+                   .norm() <
+               1e-6 * std::max(
+                          1.0,
                           compute_barrier_subproblem_constraint_residuals(cx, s)
                               .norm()));
 
-      // Tangential step:  W*w_z + Abar(lambda + w_lamba) + grad_varphi = 0
-      assert(
-          (compute_barrier_subproblem_Hessian_of_Lagrangian_product(HxL, Sigma,
-                                                                    w) +
-           compute_Abar_transpose_product<Vector, EqVector, IneqVector,
-                                          EqJacobian, IneqJacobian>(
-               Ax, lambda + w_lambda) +
-           compute_barrier_subproblem_objective_gradient(gradfx, s, mu))
-              .norm() <
-          1e-6 *
-              std::max(
-                  1.0,
-                  (compute_barrier_subproblem_objective_gradient(gradfx, s,
-                                                                 mu) +
-                   compute_Abar_transpose_product<Vector, EqVector, IneqVector,
-                                                  EqJacobian, IneqJacobian>(
-                       Ax, lambda))
-                      .norm()));
-
-      // Tangential step:  A*w_z = 0
-      assert((compute_Abar_product<Vector, EqVector, IneqVector, EqJacobian,
-                                   IneqJacobian>(Ax, w)
-                  .norm()) < 1e-6 * std::max(1.0, w.norm()));
-
-      // Check whether the primal tangential update w satisfies the
-      // following two (necessary and sufficient) conditions for providing a
-      // valid backtracking linesearch direction of descent:
-      //
-      //(1) w is a direction of descent for the barrier subproblem
-      //(2) w is a direction of positive curvature for the Hessian of the
-      //    Lagrangian of the barrier subproblem
-
-      Pair<Vector, IneqVector> grad_varphi =
-          compute_barrier_subproblem_objective_gradient(gradfx, s, mu);
-      Scalar grad_varphi_w = grad_varphi.inner_product(w);
-
-      Scalar wtWw = w.inner_product(
-          compute_barrier_subproblem_Hessian_of_Lagrangian_product(HxL, Sigma,
-                                                                   w));
-
-      if ((grad_varphi_w <= 0) && (wtWw >= 0)) {
-        // The tangential update step w is a valid descent direction for the
-        // local quadratic model of barrier objective, and therefore the
-        // composite primal-dual update steps d = v + w and
-        // delta_lambda = v_lambda + w_lambda are valid directions for a
-        // backtracking line search
-        Pair<Vector, IneqVector> dz = v + w;
-        Pair<EqVector, IneqVector> dlambda = v_lambda + w_lambda;
-
-        // Compute the maximum admissible steplength satisfying the
-        // fraction-to-boundary rule for the auxiliary slack variables
-        Scalar alpha =
-            compute_maximum_admissible_steplength(s, dz.second, params.tau);
-
-        // Compute the inner product of the gradient grad_varphi(z) of the
-        // barrier objective with the primal update step dz
-        Scalar grad_varphi_dz = grad_varphi.inner_product(dz);
-
-        // Compute barrier residual norm
-        Scalar cz_norm =
-            compute_barrier_subproblem_constraint_residuals(cx, s).norm();
-
-        // Compute value of quadratic term dzWdz
-        Pair<Vector, IneqVector> Wdz =
-            compute_barrier_subproblem_Hessian_of_Lagrangian_product(HxL, Sigma,
-                                                                     dz);
-
-        /// STEP 1:  COMPUTE PENALTY UPDATE
-
-        if (cz_norm >= std::max(params.infeasibility_tolerance,
-                                sqrt(std::numeric_limits<Scalar>::epsilon()))) {
-          // Compute numerator for penalty update (cf. eq. (3.5) in the paper
-          // "An Interior Algorithm for Nonlinear Optimization that Combines
-          // Line-Search and Trust-Region Steps")
-          Scalar nu_trial_numerator = grad_varphi_dz;
-          Scalar dztWdz = dz.inner_product(Wdz);
-          if (dztWdz > 0)
-            nu_trial_numerator += dztWdz / 2;
-
-          // Denominator of trial update (cf. eq. (3.5))
-          // cznorm := |c(x,s)| = |ce(x)    |
-          //                      |ci(x) + s|
-          //
-          // the norm of the residuals of the constraints for the barrier
-          // subproblem
-
-          Scalar nu_trial_denominator = (1 - params.rho) * cz_norm;
-
-          // Compute updated penalty (eq. 3.3)
-          nu = std::max(nu, nu_trial_numerator / nu_trial_denominator + 1);
-        } // Penalty update
-
-        /// STEP 2: BACKTRACKING LINESEARCH
-
-        // Compute directional derivative of merit function along the
-        // direction of the primal update step (cf. eq. (3.7))
-        Scalar Dphi = grad_varphi_dz - nu * cz_norm;
-
-        // Verify that the directional derivative Dphi satisfies eq. (3.8)
-        assert(Dphi <= -params.rho * nu * cz_norm);
-
-        // Evaluate merit function at current iterate z
-        Scalar phi_z = evaluate_merit_function(fx, cx, s, mu, nu);
-
-        /// BACKTRACKING ARMIJO LINESEARCH
-        alpha *= 2;
-        num_pd_linesearch_iters = -1; // Number of linesearches performed
-
-        do {
-          ++num_pd_linesearch_iters;
-          alpha /= 2;
-
-          // Compute trial primal and dual update steps
-          d = alpha * dz;
-          delta_lambda = alpha * dlambda;
-
-          // Compute trial point
-          zplus = z + d;
-
-          // Evaluate objective and constraints at new trial point
-          f_xplus = f(xplus, args...);
-          c_xplus = c(xplus, args...);
-
-          // Perform slack reset (cf. eq. (3.13) of the paper "An Interior
-          // Point Algorithm for Nonlinear Optimization That Combines Line
-          // Search and Trust Region Steps")
-          if (mi > 0) {
-            splus = reset_slacks(splus, c_xplus.second);
-          }
-
-          // Evaluate merit function at trial iterate zplus
-          Scalar phi_zplus =
-              evaluate_merit_function(f_xplus, c_xplus, splus, mu, nu);
-
-          //  Test Armijo step acceptance criterion (cf. eq. (3.9), although
-          //  note that this equation has a typo in the paper)
-          rho = (phi_zplus - phi_z) / (alpha * Dphi);
-          step_accepted = (rho > params.ls_alpha);
-
-          // Special case: if this is the first iteration of linesearch (full
-          // steplength), try computing a second-order correction
-          if (!step_accepted && (num_pd_linesearch_iters == 0)) {
-
-            /// Special case: if the full-length step does not satisfy the
-            /// Armijo sufficient decrease condition, try computing a
-            /// second-order correction
-            SOC_applied = true;
-
-            // Vectors to hold second-order correction steps
-            Pair<Vector, IneqVector> dz_soc;
-            Pair<EqVector, IneqVector> dlambda_soc;
-
-            // Compute predicted gradient of Lagrangian at trial point
-            // (d + dz, lambda + delta_lambda)
-            Pair<Vector, IneqVector> gradLz_plus =
-                grad_varphi + alpha * Wdz +
+        // Tangential step:  W*w_z + Abar(lambda + w_lamba) + grad_varphi = 0
+        assert((compute_barrier_subproblem_Hessian_of_Lagrangian_product(
+                    HxL, Sigma, w) +
                 compute_Abar_transpose_product<Vector, EqVector, IneqVector,
                                                EqJacobian, IneqJacobian>(
-                    Ax, lambda + delta_lambda);
+                    Ax, lambda + w_lambda) +
+                compute_barrier_subproblem_objective_gradient(gradfx, s, mu))
+                   .norm() <
+               1e-6 *
+                   std::max(1.0, (compute_barrier_subproblem_objective_gradient(
+                                      gradfx, s, mu) +
+                                  compute_Abar_transpose_product<
+                                      Vector, EqVector, IneqVector, EqJacobian,
+                                      IneqJacobian>(Ax, lambda))
+                                     .norm()));
 
-            /// Compute second-order correction (cf. eq. (3.10) in the paper)
+        // Tangential step:  A*w_z = 0
+        assert((compute_Abar_product<Vector, EqVector, IneqVector, EqJacobian,
+                                     IneqJacobian>(Ax, w)
+                    .norm()) < 1e-6 * std::max(1.0, w.norm()));
 
-            (*kkt_system_solver)(
-                HxL, Sigma, Ax, false, -gradLz_plus,
-                -compute_barrier_subproblem_constraint_residuals(c_xplus,
-                                                                 splus),
-                dz_soc, dlambda_soc, args...);
+        /// END PRIMAL-DUAL STEP ASSERTION CHECKING
 
-            // Compute second-order-corrected update step (cf. eq. (3.11))
-            d += dz_soc;
-            delta_lambda += dlambda_soc;
+        // Check whether the primal tangential update w satisfies the
+        // following two (necessary and sufficient) conditions for providing a
+        // valid backtracking linesearch direction of descent:
+        //
+        // (1) w is a direction of descent for the barrier subproblem
+        // (2) w is a direction of positive curvature for the Hessian of the
+        //     Lagrangian of the barrier subproblem
 
-            // Compute maximum admissible steplengths for primal and dual
-            // second-order-corrected steps (cf. eq. (3.12))
-            Scalar gamma_soc =
-                compute_maximum_admissible_steplength(s, d.second, params.tau);
+        Pair<Vector, IneqVector> grad_varphi =
+            compute_barrier_subproblem_objective_gradient(gradfx, s, mu);
+        Scalar grad_varphi_w = grad_varphi.inner_product(w);
 
-            // Compute scaled second-order primal and dual updates
-            d *= gamma_soc;
-            delta_lambda *= gamma_soc;
+        Scalar wtWw = w.inner_product(
+            compute_barrier_subproblem_Hessian_of_Lagrangian_product(HxL, Sigma,
+                                                                     w));
 
-            // Compute second-order-corrected trial point
+        if ((grad_varphi_w <= 0) && (wtWw >= 0)) {
+          // The tangential update step w is a valid descent direction for the
+          // local quadratic model of barrier objective, and therefore the
+          // composite primal-dual update steps d = v + w and
+          // delta_lambda = v_lambda + w_lambda are valid directions for a
+          // backtracking line search
+          Pair<Vector, IneqVector> dz = v + w;
+          Pair<EqVector, IneqVector> dlambda = v_lambda + w_lambda;
+
+          // Compute the maximum admissible steplength satisfying the
+          // fraction-to-boundary rule for the auxiliary slack variables
+          Scalar alpha =
+              compute_maximum_admissible_steplength(s, dz.second, params.tau);
+
+          // Compute the inner product of the gradient grad_varphi(z) of the
+          // barrier objective with the primal update step dz
+          Scalar grad_varphi_dz = grad_varphi.inner_product(dz);
+
+          // Compute barrier residual norm
+          Scalar cz_norm =
+              compute_barrier_subproblem_constraint_residuals(cx, s).norm();
+
+          // Compute value of quadratic term dzWdz
+          Pair<Vector, IneqVector> Wdz =
+              compute_barrier_subproblem_Hessian_of_Lagrangian_product(
+                  HxL, Sigma, dz);
+
+          /// STEP 1:  COMPUTE PENALTY UPDATE
+
+          if (cz_norm >=
+              std::max(params.infeasibility_tolerance,
+                       sqrt(std::numeric_limits<Scalar>::epsilon()))) {
+            // Compute numerator for penalty update (cf. eq. (3.5) in the paper
+            // "An Interior Algorithm for Nonlinear Optimization that Combines
+            // Line-Search and Trust-Region Steps")
+            Scalar nu_trial_numerator = grad_varphi_dz;
+            Scalar dztWdz = dz.inner_product(Wdz);
+            if (dztWdz > 0)
+              nu_trial_numerator += dztWdz / 2;
+
+            // Denominator of trial update (cf. eq. (3.5))
+            // cznorm := |c(x,s)| = |ce(x)    |
+            //                      |ci(x) + s|
+            //
+            // the norm of the residuals of the constraints for the barrier
+            // subproblem
+
+            Scalar nu_trial_denominator = (1 - params.rho) * cz_norm;
+
+            // Compute updated penalty (eq. 3.3)
+            nu = std::max(nu, nu_trial_numerator / nu_trial_denominator + 1);
+          } // Penalty update
+
+          /// STEP 2: BACKTRACKING LINESEARCH
+
+          // Compute directional derivative of merit function along the
+          // direction of the primal update step (cf. eq. (3.7))
+          Scalar Dphi = grad_varphi_dz - nu * cz_norm;
+
+          // Verify that the directional derivative Dphi satisfies eq. (3.8)
+          assert(Dphi <= -params.rho * nu * cz_norm);
+
+          // Evaluate merit function at current iterate z
+          Scalar phi_z = evaluate_merit_function(fx, cx, s, mu, nu);
+
+          /// BACKTRACKING ARMIJO LINESEARCH
+          alpha *= 2;
+          num_pd_linesearch_iters = -1; // Number of linesearches performed
+
+          do {
+            ++num_pd_linesearch_iters;
+            alpha /= 2;
+
+            // Compute trial primal and dual update steps
+            d = alpha * dz;
+            delta_lambda = alpha * dlambda;
+
+            // Compute trial point
             zplus = z + d;
 
             // Evaluate objective and constraints at new trial point
@@ -753,32 +688,100 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
             }
 
             // Evaluate merit function at trial iterate zplus
-            phi_zplus =
+            Scalar phi_zplus =
                 evaluate_merit_function(f_xplus, c_xplus, splus, mu, nu);
 
-            // Test acceptance at second-order corrected trial point
+            //  Test Armijo step acceptance criterion (cf. eq. (3.9), although
+            //  note that this equation has a typo in the paper)
             rho = (phi_zplus - phi_z) / (alpha * Dphi);
             step_accepted = (rho > params.ls_alpha);
 
-          } // Second-order correction
+            // Special case: if this is the first iteration of linesearch (full
+            // steplength), try computing a second-order correction
+            if (!step_accepted && (num_pd_linesearch_iters == 0)) {
 
-        } while ((!step_accepted) &&
-                 (num_pd_linesearch_iters < params.max_ls_iters) &&
-                 (params.ls_alpha * alpha >= params.alpha_min));
+              /// Special case: if the full-length step does not satisfy the
+              /// Armijo sufficient decrease condition, try computing a
+              /// second-order correction
+              SOC_applied = true;
 
-        if (step_accepted) {
-          // Set step type
-          step_type = TRSQPStepType::PrimalDual;
+              // Vectors to hold second-order correction steps
+              Pair<Vector, IneqVector> dz_soc;
+              Pair<EqVector, IneqVector> dlambda_soc;
 
-          // Update Lagrange multipliers
-          lambda += delta_lambda;
+              // Compute predicted gradient of Lagrangian at trial point
+              // (d + dz, lambda + delta_lambda)
+              Pair<Vector, IneqVector> gradLz_plus =
+                  grad_varphi + alpha * Wdz +
+                  compute_Abar_transpose_product<Vector, EqVector, IneqVector,
+                                                 EqJacobian, IneqJacobian>(
+                      Ax, lambda + delta_lambda);
 
-          // Update trust-region step
-          Delta_plus = std::max(Delta, 2 * compute_trust_region_norm(d, s));
+              /// Attempt to compute a second-order correction (cf. eq. (3.10)
+              /// in the paper)
 
-        } // Step accepted
-      }   // Primal-dual step is valid
-    }     // Primal-dual step computation
+              if ((*kkt_system_solver)(
+                      HxL, Sigma, Ax, false, -gradLz_plus,
+                      -compute_barrier_subproblem_constraint_residuals(c_xplus,
+                                                                       splus),
+                      dz_soc, dlambda_soc, args...)) {
+
+                // If KKT system was successfully solved
+
+                // Compute second-order-corrected update step (cf. eq. (3.11))
+                d += dz_soc;
+                delta_lambda += dlambda_soc;
+
+                // Compute maximum admissible steplengths for primal and dual
+                // second-order-corrected steps (cf. eq. (3.12))
+                Scalar gamma_soc = compute_maximum_admissible_steplength(
+                    s, d.second, params.tau);
+
+                // Compute scaled second-order primal and dual updates
+                d *= gamma_soc;
+                delta_lambda *= gamma_soc;
+
+                // Compute second-order-corrected trial point
+                zplus = z + d;
+
+                // Evaluate objective and constraints at new trial point
+                f_xplus = f(xplus, args...);
+                c_xplus = c(xplus, args...);
+
+                // Perform slack reset (cf. eq. (3.13) of the paper "An Interior
+                // Point Algorithm for Nonlinear Optimization That Combines Line
+                // Search and Trust Region Steps")
+                if (mi > 0) {
+                  splus = reset_slacks(splus, c_xplus.second);
+                }
+
+                // Evaluate merit function at trial iterate zplus
+                phi_zplus =
+                    evaluate_merit_function(f_xplus, c_xplus, splus, mu, nu);
+
+                // Test acceptance at second-order corrected trial point
+                rho = (phi_zplus - phi_z) / (alpha * Dphi);
+                step_accepted = (rho > params.ls_alpha);
+              } // SOC KKT system successfully solved
+            }   // Second-order correction
+          } while ((!step_accepted) &&
+                   (num_pd_linesearch_iters < params.max_ls_iters) &&
+                   (params.ls_alpha * alpha >= params.alpha_min));
+
+          if (step_accepted) {
+            // Set step type
+            step_type = TRSQPStepType::PrimalDual;
+
+            // Update Lagrange multipliers
+            lambda += delta_lambda;
+
+            // Update trust-region step
+            Delta_plus = std::max(Delta, 2 * compute_trust_region_norm(d, s));
+
+          } // Step accepted
+        }   // Primal-dual step is valid
+      }     // Primal-dual step computed successfully
+    }       // Attempt primal-dual step computation
 
     /// BYRD-OMOJOKUN COMPOSITE UPDATE STEP COMPUTATION
     if (!step_accepted) {
@@ -1108,7 +1111,8 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
                                            gradLx, cx, s, lambda.second, mu)
                                      : 0);
     }
-  } // Iterations:  for (unsigned int k = 0; k < params.max_iterations; ++k) ...
+  } // Iterations:  for (unsigned int k = 0; k < params.max_iterations; ++k)
+    // ...
 
   /// Record final outputs
   result.elapsed_time = Stopwatch::tock(start_time);
@@ -1133,10 +1137,10 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
       break;
 
     case TRSQPStatus::TrustRegion:
-      std::cout
-          << "Algorithm terminated because the trust-region radius decreased "
-             "below the minimum admissible value ("
-          << Delta << " < " << params.DeltaMin << ")" << std::endl;
+      std::cout << "Algorithm terminated because the trust-region radius "
+                   "decreased "
+                   "below the minimum admissible value ("
+                << Delta << " < " << params.DeltaMin << ")" << std::endl;
       break;
 
     case TRSQPStatus::InfeasibleStationary:
