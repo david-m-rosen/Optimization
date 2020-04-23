@@ -522,9 +522,7 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
 
       // Dual components of normal and tangential updates
       Pair<EqVector, IneqVector> v_lambda, w_lambda;
-      bool pd_comp_success = false;
-
-      pd_comp_success =
+      bool pd_comp_success =
           compute_primal_dual_update_components<Vector, EqVector, IneqVector,
                                                 EqJacobian, IneqJacobian,
                                                 Hessian, Scalar, Args...>(
