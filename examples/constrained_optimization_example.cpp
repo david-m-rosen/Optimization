@@ -191,7 +191,7 @@ PDStrategyFunction pd_strategy =
        const Vector &gradfx, const SparseMatrix &Hx, const Vector &Sigma,
        const Optimization::Constrained::Pair<Vector, Vector> &cx,
        const Optimization::Constrained::Pair<SparseMatrix, SparseMatrix> &Ax,
-       Scalar mu, Scalar Delta,
+       Scalar mu, Scalar epsilon, Scalar Delta,
        Optimization::Constrained::TRSQPStepType prev_step_type, size_t CG_iters,
        const Optimization::Constrained::Pair<Vector, Vector> &d,
        bool prev_step_accepted) -> bool {

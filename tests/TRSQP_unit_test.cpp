@@ -348,7 +348,7 @@ protected:
                      const Vector &gradfx, const SparseMatrix &Hx,
                      const Vector &Sigma, const Pair<Vector, Vector> &cx,
                      const Pair<SparseMatrix, SparseMatrix> &Ax, Scalar mu,
-                     Scalar Delta, TRSQPStepType prev_step_type,
+                     Scalar epsilon, Scalar Delta, TRSQPStepType prev_step_type,
                      size_t CG_iters, const Pair<Vector, Vector> &d,
                      bool prev_step_accepted) -> bool {
       // Super simple strategy: always attempt primal-dual step computation

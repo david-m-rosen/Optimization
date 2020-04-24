@@ -515,7 +515,7 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
     // attempted
     if (primal_dual_strategy &&
         (*primal_dual_strategy)(k, elapsed_time, x, s, lambda, fx, gradfx, HxL,
-                                Sigma, cx, Ax, mu, Delta, step_type,
+                                Sigma, cx, Ax, mu, epsilon_mu, Delta, step_type,
                                 num_STPCG_iters, d, step_accepted, args...)) {
 
       /// PRIMAL-DUAL STEP COMPUTATION
@@ -1035,8 +1035,8 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
       // Call the user-supplied function
       bool user_requested_termination = (*user_function)(
           k, elapsed_time, x, s, lambda, fx, gradfx, HxL, Sigma, cx, Ax, mu,
-          Delta, step_type, num_STPCG_iters, v, w, d, nu, rho, SOC_applied,
-          step_accepted, args...);
+          epsilon_mu, Delta, step_type, num_STPCG_iters, v, w, d, nu, rho,
+          SOC_applied, step_accepted, args...);
 
       if (user_requested_termination) {
         result.status = TRSQPStatus::UserFunction;

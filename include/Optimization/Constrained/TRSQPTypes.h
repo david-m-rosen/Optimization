@@ -129,10 +129,10 @@ struct TRSQPParams : public NLPOptimizerParams<Scalar> {
   Scalar ls_alpha = .5;
 
   /** Maximum number of backtracking line-search iterations to attempt */
-  size_t max_ls_iters = 4;
+  size_t max_ls_iters = 10;
 
   /** Minimum steplength for accepting a primal-dual update step */
-  Scalar alpha_min = 1e-2;
+  Scalar alpha_min = 1e-6;
 
   /// Barrier subproblem parameters
 
@@ -320,6 +320,7 @@ using KKTSystemSolverFunction = std::function<bool(
  * - cx: Current value of constraint functions
  * - Ax: Current value of constraint Jacobians
  * - mu: Current value of barrier parameter
+ * - epsilon:  KKT residual tolerance for the current barrier subproblem
  * - Delta: Current trust-region radius
  * - prev_step_type: The type of step computed during the *previous*
  *   iteration
@@ -342,16 +343,15 @@ using KKTSystemSolverFunction = std::function<bool(
 template <typename Vector, typename EqVector, typename IneqVector,
           typename EqJacobian, typename IneqJacobian, typename Hessian,
           typename Scalar = double, typename... Args>
-using PrimalDualStrategyFunction =
-    std::function<bool(size_t k, double t, const Vector &x, const IneqVector &s,
-                       const Pair<EqVector, IneqVector> &lambda, Scalar fx,
-                       const Vector &gradfx, const Hessian &Hx,
-                       const IneqVector &Sigma,
-                       const Pair<EqVector, IneqVector> &cx,
-                       const Pair<EqJacobian, IneqJacobian> &Ax, Scalar mu,
-                       Scalar Delta, TRSQPStepType prev_step_type,
-                       size_t CG_iters, const Pair<Vector, IneqVector> &d,
-                       bool prev_step_accepted, Args &... args)>;
+using PrimalDualStrategyFunction = std::function<bool(
+    size_t k, double t, const Vector &x, const IneqVector &s,
+    const Pair<EqVector, IneqVector> &lambda, Scalar fx, const Vector &gradfx,
+    const Hessian &Hx, const IneqVector &Sigma,
+    const Pair<EqVector, IneqVector> &cx,
+    const Pair<EqJacobian, IneqJacobian> &Ax, Scalar mu, Scalar epsilon,
+    Scalar Delta, TRSQPStepType prev_step_type, size_t CG_iters,
+    const Pair<Vector, IneqVector> &d, bool prev_step_accepted,
+    Args &... args)>;
 
 /** An alias template for a user-definable function that can be
  * used to access various internal quantities of interest as the TRSQP
@@ -369,14 +369,13 @@ using PrimalDualStrategyFunction =
  * - cx: Value of constraint functions at the *start* of the current iteration
  * - Ax: Value of constraint Jacobians at the *start* of the current iteration
  * - mu: Value of barrier parameter used to compute the update step
+ * - epsilon:  KKT residual tolerance for the current barrier subproblem
  * - Delta: trust-region radius at the *start* of the current iteration
  * - step_type: The type of step computed during the current iteration
  * - CG_iters: number of conjugate-gradient iterations used to compute the
  *   tangential update step
- * - v:  Normal component of the Byrd-Omojokun composite update step, if one
- *   was computed during the current iteration
- * - w:  Tangential component of the Byrd-Omojokun composite update step, if
- *   one was computed during the current iteration
+ * - v:  Normal component of the update step
+ * - w:  Tangential component of the update step
  * - d:  Update step computed during the current iteration (including
  *   second-order correction, if one was applied)
  * - nu:  Current value of the merit function penalty parameter
@@ -402,10 +401,11 @@ using TRSQPUserFunction = std::function<bool(
     const Pair<EqVector, IneqVector> &lambda, Scalar fx, const Vector &gradfx,
     const Hessian &Hx, const IneqVector &Sigma,
     const Pair<EqVector, IneqVector> &cx,
-    const Pair<EqJacobian, IneqJacobian> &Ax, Scalar mu, Scalar Delta,
-    TRSQPStepType step_type, size_t CG_iters, const Pair<Vector, IneqVector> &v,
-    const Pair<Vector, IneqVector> &w, const Pair<Vector, IneqVector> &d,
-    Scalar nu, Scalar rho, bool SOC_applied, bool accepted, Args &... args)>;
+    const Pair<EqJacobian, IneqJacobian> &Ax, Scalar mu, Scalar epsilon,
+    Scalar Delta, TRSQPStepType step_type, size_t CG_iters,
+    const Pair<Vector, IneqVector> &v, const Pair<Vector, IneqVector> &w,
+    const Pair<Vector, IneqVector> &d, Scalar nu, Scalar rho, bool SOC_applied,
+    bool accepted, Args &... args)>;
 
 } // namespace Constrained
 } // namespace Optimization
