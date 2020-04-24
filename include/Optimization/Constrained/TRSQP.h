@@ -203,16 +203,19 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
         "satisfy 0 <= cg_theta <= 1");
 
   if ((params.ls_alpha <= 0) || (params.ls_alpha >= 1))
-    throw std::invalid_argument("Armijo linesearch sufficient decrease "
-                                "parameter must be in the range (0,1");
+    throw std::invalid_argument(
+        "Primal-dual Armijo line search sufficient decrease parameter must be "
+        "in the range (0,1)");
 
   if (params.max_ls_iters < 0)
-    throw std::invalid_argument("Maximum number of line search iterations must "
-                                "be a nonnegative integer");
-
-  if (params.alpha_min < 0 || params.alpha_min > 1)
     throw std::invalid_argument(
-        "Minimum stepsize must be a real value in the range [0, 1]");
+        "Maximum number of primal-dual line search iterations must "
+        "be a nonnegative integer");
+
+  if (params.ls_alpha_min < 0 || params.ls_alpha_min > 1)
+    throw std::invalid_argument(
+        "Minimum stepsize for primal-dual backtracking line search must be a "
+        "real value in the range [0, 1]");
 
   if (bool(primal_dual_strategy) != bool(kkt_system_solver))
     throw std::invalid_argument(
@@ -630,9 +633,9 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
           if (cz_norm >=
               std::max(params.infeasibility_tolerance,
                        sqrt(std::numeric_limits<Scalar>::epsilon()))) {
-            // Compute numerator for penalty update (cf. eq. (3.5) in the paper
-            // "An Interior Algorithm for Nonlinear Optimization that Combines
-            // Line-Search and Trust-Region Steps")
+            // Compute numerator for penalty update (cf. eq. (3.5) in the
+            // paper "An Interior Algorithm for Nonlinear Optimization that
+            // Combines Line-Search and Trust-Region Steps")
             Scalar nu_trial_numerator = grad_varphi_dz;
             Scalar dztWdz = dz.inner_product(Wdz);
             if (dztWdz > 0)
@@ -698,8 +701,8 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
             rho = (phi_zplus - phi_z) / (alpha * Dphi);
             step_accepted = (rho > params.ls_alpha);
 
-            // Special case: if this is the first iteration of linesearch (full
-            // steplength), try computing a second-order correction
+            // Special case: if this is the first iteration of linesearch
+            // (full steplength), try computing a second-order correction
             if (!step_accepted && (num_pd_linesearch_iters == 0)) {
 
               /// Special case: if the full-length step does not satisfy the
@@ -750,9 +753,9 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
                 f_xplus = f(xplus, args...);
                 c_xplus = c(xplus, args...);
 
-                // Perform slack reset (cf. eq. (3.13) of the paper "An Interior
-                // Point Algorithm for Nonlinear Optimization That Combines Line
-                // Search and Trust Region Steps")
+                // Perform slack reset (cf. eq. (3.13) of the paper "An
+                // Interior Point Algorithm for Nonlinear Optimization That
+                // Combines Line Search and Trust Region Steps")
                 if (mi > 0) {
                   splus = reset_slacks(splus, c_xplus.second);
                 }
@@ -768,7 +771,7 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
             }   // Second-order correction
           } while ((!step_accepted) &&
                    (num_pd_linesearch_iters < params.max_ls_iters) &&
-                   (params.ls_alpha * alpha >= params.alpha_min));
+                   (params.ls_alpha * alpha >= params.ls_alpha_min));
 
           if (step_accepted) {
             // Set step type

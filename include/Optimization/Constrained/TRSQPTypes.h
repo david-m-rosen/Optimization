@@ -129,10 +129,10 @@ struct TRSQPParams : public NLPOptimizerParams<Scalar> {
   Scalar ls_alpha = .5;
 
   /** Maximum number of backtracking line-search iterations to attempt */
-  size_t max_ls_iters = 10;
+  size_t max_ls_iters = 5;
 
   /** Minimum steplength for accepting a primal-dual update step */
-  Scalar alpha_min = 1e-6;
+  Scalar ls_alpha_min = 1e-6;
 
   /// Barrier subproblem parameters
 
