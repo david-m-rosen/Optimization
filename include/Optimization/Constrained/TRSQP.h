@@ -505,18 +505,22 @@ TRSQPResult<Vector, EqVector, IneqVector, Scalar> TRSQP(
 
     /// COMPUTE UPDATE STEP
 
+    // Boolean value indicating whether a primal-dual update step should be
+    // attempted
+    bool attempt_primal_dual_step =
+        (primal_dual_strategy &&
+         (*primal_dual_strategy)(k, elapsed_time, x, s, lambda, fx, gradfx, HxL,
+                                 Sigma, cx, Ax, mu, epsilon_mu, Delta,
+                                 step_type, num_STPCG_iters, d, step_accepted,
+                                 args...));
+
     // Reset status flags
     num_STPCG_iters = 0;
     num_pd_linesearch_iters = 0;
     SOC_applied = false;
     step_accepted = false;
 
-    // Boolean value indicating whether a primal-dual update step should be
-    // attempted
-    if (primal_dual_strategy &&
-        (*primal_dual_strategy)(k, elapsed_time, x, s, lambda, fx, gradfx, HxL,
-                                Sigma, cx, Ax, mu, epsilon_mu, Delta, step_type,
-                                num_STPCG_iters, d, step_accepted, args...)) {
+    if (attempt_primal_dual_step) {
 
       /// PRIMAL-DUAL STEP COMPUTATION
 
