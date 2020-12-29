@@ -135,6 +135,33 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
     const std::experimental::optional<
         GradientDescentUserFunction<Variable, Tangent, Scalar, Args...>>
         &user_function = std::experimental::nullopt) {
+
+  /// Argument checking
+
+  // Termination criteria
+
+  if (params.max_computation_time < 0)
+    throw std::invalid_argument(
+        "Maximum computation time must be a nonnegative real value");
+
+  if (params.gradient_tolerance < 0)
+    throw std::invalid_argument(
+        "Gradient tolerance must be a nonnegative real value");
+
+  if (params.alpha <= 0)
+    throw std::invalid_argument("Initial stepsize for backtracking line-search "
+                                "must be a positive real value");
+
+  if (params.beta <= 0 || params.beta >= 1)
+    throw std::invalid_argument(
+        "Multiplicative shrinkage factor for stepsize in backtracking "
+        "line-search must be a value in the range (0, 1)");
+
+  if (params.sigma <= 0 || params.sigma >= 1)
+    throw std::invalid_argument(
+        "Sufficient fractional decrease parameter for step acceptance in "
+        "backtracking line search must be a value in the range (0, 1)");
+
   /// Declare and initialize some useful variables
 
   // Square root of machine precision for Scalars
