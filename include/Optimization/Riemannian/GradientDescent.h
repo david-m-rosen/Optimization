@@ -61,27 +61,27 @@ struct GradientDescentParams : public SmoothOptimizerParams<Scalar> {
  * algorithm termination */
 enum class GradientDescentStatus {
   /** The algorithm obtained a solution satisfying the gradient tolerance */
-  GRADIENT,
+  Gradient,
 
   /** The algorithm terminated because the relative decrease in function value
      obtained after the last accepted update was less than the specified
      tolerance */
-  RELATIVE_DECREASE,
+  RelativeDecrease,
 
   /** The algorithm terminated because the norm of the last accepted update step
      was less than the specified tolerance */
-  STEPSIZE,
+  Stepsize,
 
   /** The algorithm terminated because linesearch failed to determine a stepsize
      along the gradient direction that generated a sufficient decrease in
      function value */
-  LINESEARCH,
+  LineSearch,
 
   /** The algorithm exhausted the allotted number of major (outer) iterations */
-  ITERATION_LIMIT,
+  IterationLimit,
 
   /** The algorithm exhausted the allotted computation time */
-  ELAPSED_TIME,
+  ElapsedTime,
 };
 
 /** A useful struct used to hold the output of a gradient descent optimization
@@ -179,7 +179,7 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
 
   // Output struct
   GradientDescentResult<Variable, Scalar> result;
-  result.status = GradientDescentStatus::ITERATION_LIMIT;
+  result.status = GradientDescentStatus::IterationLimit;
 
   /// INITIALIZATION
 
@@ -207,7 +207,7 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
     double elapsed_time = Stopwatch::tock(start_time);
 
     if (elapsed_time > params.max_computation_time) {
-      result.status = GradientDescentStatus::ELAPSED_TIME;
+      result.status = GradientDescentStatus::ElapsedTime;
       break;
     }
 
@@ -229,7 +229,7 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
 
     // Test gradient-based stopping criterion
     if (grad_f_x_norm < params.gradient_tolerance) {
-      result.status = GradientDescentStatus::GRADIENT;
+      result.status = GradientDescentStatus::Gradient;
       break;
     }
 
@@ -268,7 +268,7 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
 
     // Was linesearch successful?
     if (!accept) {
-      result.status = GradientDescentStatus::LINESEARCH;
+      result.status = GradientDescentStatus::LineSearch;
       break;
     }
 
@@ -304,12 +304,12 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
 
     // Test additional stopping criteria
     if (relative_decrease < params.relative_decrease_tolerance) {
-      result.status = GradientDescentStatus::RELATIVE_DECREASE;
+      result.status = GradientDescentStatus::RelativeDecrease;
       break;
     }
 
     if (h_norm < params.stepsize_tolerance) {
-      result.status = GradientDescentStatus::STEPSIZE;
+      result.status = GradientDescentStatus::Stepsize;
       break;
     }
 
@@ -332,31 +332,31 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
 
     // Print the reason for termination
     switch (result.status) {
-    case GradientDescentStatus::GRADIENT:
+    case GradientDescentStatus::Gradient:
       std::cout << "Found first-order critical point! (Gradient norm: "
                 << grad_f_x_norm << ")" << std::endl;
       break;
-    case GradientDescentStatus::RELATIVE_DECREASE:
+    case GradientDescentStatus::RelativeDecrease:
       std::cout
           << "Algorithm terminated due to insufficient relative decrease: "
           << relative_decrease << " < " << params.relative_decrease_tolerance
           << std::endl;
       break;
-    case GradientDescentStatus::STEPSIZE:
+    case GradientDescentStatus::Stepsize:
       std::cout
           << "Algorithm terminated due to excessively small step size: |h| = "
           << h_norm << " < " << params.stepsize_tolerance << std::endl;
       break;
-    case GradientDescentStatus::LINESEARCH:
+    case GradientDescentStatus::LineSearch:
       std::cout << "Algorithm terminated due to linesearch's inability to find "
                    "a stepsize with sufficient decrease"
                 << std::endl;
       break;
-    case GradientDescentStatus::ITERATION_LIMIT:
+    case GradientDescentStatus::IterationLimit:
       std::cout << "Algorithm exceeded maximum number of outer iterations"
                 << std::endl;
       break;
-    case GradientDescentStatus::ELAPSED_TIME:
+    case GradientDescentStatus::ElapsedTime:
       std::cout << "Algorithm exceeded maximum allowed computation time: "
                 << result.elapsed_time << " > " << params.max_computation_time
                 << std::endl;
