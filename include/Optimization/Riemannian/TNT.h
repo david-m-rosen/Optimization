@@ -251,6 +251,71 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     const std::experimental::optional<
         TNTUserFunction<Variable, Tangent, Scalar, Args...>> &user_function =
         std::experimental::nullopt) {
+
+  /// Argument checking
+
+  // Termination criteria
+
+  if (params.max_computation_time < 0)
+    throw std::invalid_argument(
+        "Maximum computation time must be a nonnegative real value");
+
+  if (params.gradient_tolerance < 0)
+    throw std::invalid_argument(
+        "Gradient tolerance must be a nonnegative real value");
+
+  if (params.preconditioned_gradient_tolerance < 0)
+    throw std::invalid_argument(
+        "Preconditioned gradient tolerance must be a nonnegative real value");
+
+  if (params.relative_decrease_tolerance < 0)
+    throw std::invalid_argument(
+        "Relative decrease tolerance must be a nonnegative real value");
+
+  if (params.stepsize_tolerance < 0)
+    throw std::invalid_argument(
+        "Stepsize tolerance must be a nonnegative real value");
+
+  if (params.Delta_tolerance < 0)
+    throw std::invalid_argument(
+        "Trust-region radius tolerance must be a nonnegative real value");
+
+  // Trust-region control parameters
+
+  if (params.Delta0 <= 0)
+    throw std::invalid_argument(
+        "Initial trust-region radius must be a positive real value");
+
+  if (params.eta1 <= 0 || params.eta1 >= 1)
+    throw std::invalid_argument(
+        "Threshold on gain ratio for a successful iteration (eta1) must "
+        "satisfy 0 < eta1 < 1");
+
+  if (params.eta1 > params.eta2 || params.eta2 >= 1)
+    throw std::invalid_argument(
+        "Threshold on gain ratio for a very successful iteration (eta2) must "
+        "satisfy eta1 <= eta2 < 1");
+
+  if (params.alpha1 <= 0 || params.alpha1 >= 1)
+    throw std::invalid_argument(
+        "Multiplicative factor for decreasing trust-region radius (alpha1) "
+        "must satisfy 0 < alpha1 < 1");
+
+  if (params.alpha2 <= 1)
+    throw std::invalid_argument(
+        "Multiplicative factor for increasing trust-region radius (alpha1) "
+        "must satisfy alpha2 > 1");
+
+  // Linear-algebraic control parameters
+  if (params.kappa_fgr <= 0 || params.kappa_fgr >= 1)
+    throw std::invalid_argument("Target relative decrease in predicted "
+                                "residual for inexact update step computation "
+                                "(kappa_fgr) must satisfy 0 < kappa_fgr < 1");
+
+  if (params.theta < 0)
+    throw std::invalid_argument("Target superlinear convergence rate parameter "
+                                "(theta) must be a nonnegative real number");
+
   /// Declare and initialize some useful variables
 
   // Square root of machine precision for type Scalar
