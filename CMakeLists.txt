@@ -20,9 +20,6 @@ endif()
 set(BUILD_OPTIMIZATION_EXAMPLES OFF CACHE BOOL "Build example executables? [disabled by default]")
 # Build the unit tests?
 set(BUILD_OPTIMIZATION_TESTS OFF CACHE BOOL "Build unit tests? [disabled by default]")
-# Enable faster instruction sets (SIMD/AVX)
-set(ENABLE_VECTORIZATION OFF CACHE BOOL "Enable vectorized instruction sets (SIMD/AVX)? [disabled by default]")
-message(STATUS "Processing CMakeLists for header-only library ${PROJECT_NAME}:\n")
 
 # SET UP EXPORT OF OPTIMIZATION LIBRARY
 
@@ -41,13 +38,6 @@ set(OPTIMIZATION_TOPLEVEL_DIR ${OPTIMIZATION_INCLUDE_DIR}/Optimization)
 set(OPTIMIZATION_HDRS
     ${OPTIMIZATION_TOPLEVEL_DIR}/Base/Concepts.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Util/Stopwatch.h
-    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/Concepts.h
-    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQPTypes.h
-    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/Pair.h
-    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQPUtilityFunctions.h
-    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQPSubproblemSolvers.h
-    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQP.h
-    ${OPTIMIZATION_TOPLEVEL_DIR}/Constrained/TRSQPEigenExtensions.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/Concepts.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/ProximalGradient.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/ADMM.h
@@ -74,7 +64,7 @@ export(TARGETS ${PROJECT_NAME} FILE ${PROJECT_NAME}Config.cmake)
 
 # Define some additional (optional) named targets, not built by default.  Typically, these will be e.g. unit tests, example executables.
 
-if(${BUILD_OPTIMIZATION_TESTS})
+if(${BUILD_OPTIMIZATION_EXAMPLES} OR ${BUILD_OPTIMIZATION_TESTS})
     # Directory for built libraries
     set(LIBRARY_OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR}/lib CACHE PATH "The directory in which to place libraries built by this project")
 

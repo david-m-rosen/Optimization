@@ -11,6 +11,30 @@ endif()
 # Add the Eigen include directories
 include_directories(${EIGEN3_INCLUDE_DIR})
 
+# Enable faster instruction sets (SIMD/AVX)
+set(ENABLE_VECTORIZATION OFF CACHE BOOL "Enable vectorized instruction sets (SIMD/AVX)? [disabled by default]")
+message(STATUS "Processing CMakeLists for header-only library ${PROJECT_NAME}:\n")
+
+if(${ENABLE_VECTORIZATION})
+message(STATUS "Enabling SIMD/AVX instruction sets")
+add_definitions(-march=native)
+endif()
+
+
+# Enable OpenMP (if available)
+set(ENABLE_OPENMP ON CACHE BOOL "Enable OpenMP (if available)")
+
+if(${ENABLE_OPENMP})
+find_package(OpenMP)
+	if(OPENMP_FOUND)
+	message(STATUS "Found OpenMP! Turning on support for parallelization\n")
+
+	# Append OpenMP compilation and linker flags to all executables
+	SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+	SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -fopenmp")
+	endif()
+endif()
+
 # EXAMPLE EXECUTABLES
 
 # Build a minimal working example to demonstrate truncated-Newton trust-region optimization over the sphere S2
@@ -21,7 +45,7 @@ target_link_libraries(Riemannian_optimization_example Optimization)
 add_executable(Euclidean_optimization_example ${CMAKE_CURRENT_SOURCE_DIR}/Euclidean_optimization_example.cpp)
 target_link_libraries(Euclidean_optimization_example Optimization)
 
-# Build a minimal working example to demonstrate the proximal gradient method on a group-sparse lasso problem
+# Build a minimal working example to demonstrate the proximal gradient method on a group-sparse LASSO problem
 add_executable(proximal_gradient_example ${CMAKE_CURRENT_SOURCE_DIR}/proximal_gradient_example.cpp)
 target_link_libraries(proximal_gradient_example Optimization)
 
@@ -30,13 +54,22 @@ add_executable(ADMM_example ${CMAKE_CURRENT_SOURCE_DIR}/ADMM_example.cpp)
 target_link_libraries(ADMM_example Optimization)
 
 
-# Build a minimal working example to demonstrate the TRSQP method applied to solve a simple nonconvex quadratic program
-add_executable(nonconvex_QP_example ${CMAKE_CURRENT_SOURCE_DIR}/nonconvex_QP_example.cpp)
-target_link_libraries(nonconvex_QP_example Optimization)
+#if(OPENMP_FOUND)
+# Add additional compilation flags to enable OpenMP support
+#set_target_properties(Riemannian_optimization_example PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+#set_target_properties(Riemannian_optimization_example PROPERTIES LINK_FLAGS "-fopenmp")
 
-# Another example to demonstrate the TRSQP method, applied to a more complicated nonconvex problem
-add_executable(constrained_optimization_example ${CMAKE_CURRENT_SOURCE_DIR}/constrained_optimization_example.cpp)
-target_link_libraries(constrained_optimization_example Optimization)
+#set_target_properties(Euclidean_optimization_example PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+#set_target_properties(Euclidean_optimization_example PROPERTIES LINK_FLAGS "-fopenmp")
+
+#set_target_properties(proximal_gradient_example PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+#set_target_properties(proximal_gradient_example PROPERTIES LINK_FLAGS "-fopenmp")
+
+#set_target_properties(ADMM_example PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+#set_target_properties(ADMM_example PROPERTIES LINK_FLAGS "-fopenmp")
+#endif()
+
+
 
 
 
