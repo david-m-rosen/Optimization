@@ -429,5 +429,334 @@ Vector STPCG(const Vector &g, const SymmetricLinearOperator<Vector, Args...> &H,
   return s_k;
 }
 
+/** This function implements (a slightly modified version of) the LSQR algorithm
+ * for approximately solving linear least-squares problems of the form:
+ *
+ *     min_x  |Ax - b|^2 + lambda * |x|^2
+ *
+ * Note that this problem is equivalent to:
+ *
+ *     min_x  |Abar*x - bbar|^2
+ *
+ * with
+ *
+ *     Abar := [     A      ]
+ *             [sqrt(lambda)]
+ *
+ *     bbar := [b]
+ *             [0].
+ *
+ * This specific implementation is based upon the MATLAB implementation provided
+ * by the Stanford Systems Optimization Laboratory, although modified to employ
+ * alternative termination criteria.  See the references:
+ *
+ * - "LSQR: An algorithm for sparse linear equations and sparse least squares",
+ *   by C.C. Paige and M.A. Saunders
+ *
+ * - "Algorithm 583.  LSQR: Sparse linear equations and least squares problems",
+ *   by C.C. Paige and M.A. Saunders
+ *
+ * for details of the algorithm.
+ *
+ * Here:
+ *
+ * - A: X -> Y and At: Y -> X are linear operators corresponding to the
+ *   coefficient matrix A and its transpose At
+ *
+ * - b is a constant vector
+ *
+ * - inner_product_x and inner_product_y are inner products defined on the
+ *   domain and codomain of A
+ *
+ * - xnorm: upon termination, this is set to |x|, the norm of
+ *   the returned solution
+ *
+ * - num_iterations: upon termination, this is set to the number of iterations
+ *   executed by the algorithm
+ *
+ * - max_iterations: maximum number of iterations
+ *
+ * - lambda: an optional Tikhonov regularization parameter for the least-squares
+ *   problem
+ *
+ * - btol and Atol are relative error tolerances defining the stopping criteria
+ *   for the algorithm: the method will terminate if *either* of the following
+ *   criteria are satisfied:
+ *
+ *   S1:  |rbar| <= btol*|b| + Atol * |Abar| * |x|
+ *
+ *   S2:  |Abar'rbar| <= Atol * |Abar| * |rbar|
+ *
+ *   Condition S1 controls the relative reduction in the least-squares residual,
+ *   and so is appropriate for use with *consistent* linear systems.  Condition
+ *   S2 controls the relative magnitude of the least-squares objective's
+ *   *gradient* g(x) := 2*Abar'rbar, and so is appropriate for use with
+ *   *inconsistent* linear systems.
+ *
+ *   See Section 6 of the paper LSQR: An algorithm for sparse linear equations
+ *   and sparse least squares" for more detail on the use of these criteria.
+ *
+ * - Abar_cond_limit: Similarly, this parameter imposes a termination tolerance
+ *   on the estimated condition number of the coefficient matrix Abar: the
+ *   algorithm will terminate if Abar_cond_est >= Abar_cond_limit.  This is
+ *   intended to regularize ill-conditioned linear systems.  Again, see Section
+ *   6 of the paper LSQR: An algorithm for sparse linear equations and sparse
+ *   least squares" for more detail on the use of this criterion.
+ */
+template <typename VectorX, typename VectorY, typename Scalar = double,
+          typename... Args>
+VectorX
+LSQR(const LinearOperator<VectorX, VectorY, Args...> &A,
+     const LinearOperator<VectorY, VectorX, Args...> &At, const VectorY &b,
+     const InnerProduct<VectorX, Scalar, Args...> &inner_product_x,
+     const InnerProduct<VectorY, Scalar, Args...> &inner_product_y,
+     Args &... args, Scalar &xnorm, size_t &num_iterations,
+     size_t max_iterations = 1000, Scalar lambda = 0, Scalar btol = 1e-6,
+     Scalar Atol = 1e-6, Scalar Abar_cond_limit = 1e8) {
+
+  /// INITIALIZATION
+
+  // Allocate output vector x
+  VectorX x;
+
+  // Norm of x
+  xnorm = 0;
+
+  // Total number of iterations
+  num_iterations = 0;
+
+  /// Norm and condition number estimates
+
+  Scalar xxnorm = 0;
+
+  // Estimate for the norm of Abar
+  Scalar Abar_norm = 0;
+
+  // Estimate for the condition number kappa(Abar) := |Abar|*|Abar^+|
+  Scalar Abar_cond_est = 0;
+
+  // Squared Frobenius norm of the matrix D := [d1, ..., dk] of search (update)
+  // directions for x computed during each iteration of LSQR (cf. eq. (4.9) of
+  // "LSQR - An Algorithm for Sparse Linear Equations and Sparse Least Squares")
+  Scalar D_Fnorm2 = 0;
+
+  // Norm of right-hand side vector b
+  Scalar bnorm;
+
+  /// Residual norms for least-squares system
+
+  // Residual rbar(x) := Abar *x - bbar of the augmented least-squares system
+  Scalar rbar_norm;
+
+  // Norm of Abar'rbar.  Note that that grad L(x) = 2Abar'rbar(x), i.e.,
+  // Abar'rbar is 1/2 of the gradient of the least-squares objective, so this
+  // quantity serves as a useful measure of how close we are to a least-squares
+  // solution
+  Scalar Abar_rbar_norm = 0;
+
+  // Square root of damping parameter
+  Scalar sqrt_lambda = sqrt(lambda);
+
+  /// Working vectors and scalars for bidiagonalization procedure
+
+  // See eq. (3.1) of "LSQR - An Algorithm for Sparse Linear Equations and
+  // Sparse Least Squares"
+  Scalar alpha = 0;
+  Scalar beta = 0;
+  VectorX v, w;
+  VectorY u;
+
+  // Compute initial *direction vectors* for u and v
+  u = b;
+  v = At(u, args...);
+
+  // Initialize x
+  x = 0 * v;
+
+  // Compute normalization constants for u and v
+  alpha = sqrt(inner_product_x(v, v, args...));
+  beta = sqrt(inner_product_y(u, u, args...));
+
+  if (beta > 0) {
+    // Normalize u
+    u /= beta;
+  }
+
+  if (alpha > 0) {
+    // Normalize v;
+    v /= alpha;
+
+    // Note that the current value of the scalar beta is a factor of alpha
+    // larger than it should be, since we computed v using u, rather than the
+    // *unit vector* uhat.
+    alpha /= beta;
+
+    // Cache w
+    w = v;
+  }
+
+  // Check termination criteria
+  Abar_rbar_norm = alpha * beta;
+  if (Abar_rbar_norm == 0) {
+    // This is already a least-squares solution, so return immediately
+    return x;
+  }
+
+  // Record initial residual norms
+  bnorm = beta;
+  rbar_norm = beta;
+
+  /// Scalars for plane rotation / bidiagonalization procedure
+
+  // Elements of the currently-relevant blocks of the QR factorization we're
+  // incrementally constructing; see equations (4.6) and (4.12) of the paper
+  // ""LSQR - An Algorithm for Sparse Linear Equations and Sparse Least
+  // Squares"
+  Scalar rhobar = alpha;
+  Scalar phibar = beta;
+
+  Scalar cs2 = -1;
+  Scalar sn2 = 0;
+  Scalar z = 0;
+  Scalar res2 = 0;
+
+  /// MAIN LOOP
+
+  for (num_iterations = 0; num_iterations < max_iterations; ++num_iterations) {
+
+    /// Perform next step of bidiagonalization procedure to obtain the next
+    /// values of beta, u, alpha, and v.  These should satisfy the relations:
+    ///
+    ///  beta * u = A * v - alpha * u
+    ///  alpha * v = A' * u - beta * v
+    ///
+    /// See eqs.
+
+    // Compute next u, beta
+    u = A(v, args...) - alpha * u;
+    beta = sqrt(inner_product_y(u, u, args...));
+
+    if (beta > 0) {
+      // Normalize u
+      u /= beta;
+
+      // Update estimate of norm of A
+      Abar_norm =
+          sqrt(Abar_norm * Abar_norm + alpha * alpha + beta * beta + lambda);
+
+      // Compute next v, alpha
+      v = At(u, args...) - beta * v;
+      alpha = sqrt(inner_product_x(v, v, args...));
+
+      if (alpha > 0)
+        v /= alpha;
+    }
+
+    /// Plane rotation to eliminate damping parameter.  This alters the diagonal
+    /// element (rhobar) of the lower-bidiagonal matrix
+
+    Scalar rhobar1 = sqrt(rhobar * rhobar + lambda);
+    Scalar cs1 = rhobar / rhobar1;
+    Scalar sn1 = sqrt_lambda / rhobar1;
+    Scalar psi = sn1 * phibar;
+
+    // Update phibar
+    phibar *= cs1;
+
+    /// Plane rotation to eliminate the subdiagonal element (beta) of the
+    /// lower-bidiagonal matrix, producing an upper-bidiagonal matrix
+
+    Scalar rho = sqrt(rhobar1 * rhobar1 + beta * beta);
+    Scalar cs = rhobar1 / rho;
+    Scalar sn = beta / rho;
+    Scalar theta = sn * alpha;
+    rhobar = -cs * alpha;
+    Scalar phi = cs * phibar;
+    phibar *= sn;
+
+    Scalar tau = sn * phi;
+
+    /// UPDATE X AND W
+
+    Scalar t1 = phi / rho;    // Stepsize for x
+    Scalar t2 = -theta / rho; // Stepsize for w
+
+    // Record norm of dk := (1/rho) * wk
+    Scalar dk2 = inner_product_x(w, w, args...) / (rho * rho);
+
+    /// Update vectors!
+    x += t1 * w;
+    w = v + t2 * w;
+
+    // Update squared Frobenius norm of D, using |dk|^2 = |wk|^2 / rho^2
+    D_Fnorm2 += dk2;
+
+    /// Use a plane rotation on the right to eliminate the super-diagonal
+    /// element (theta) of the upper-bidiagonal matrix.  Then use the result to
+    /// estimate the norm of x
+
+    Scalar delta = sn2 * rho;
+    Scalar gammabar = -cs2 * rho;
+    Scalar rhs = phi - delta * z;
+    Scalar zbar = rhs / gammabar;
+    xnorm = sqrt(xxnorm + zbar * zbar);
+    Scalar gamma = sqrt(gammabar * gammabar + theta * theta);
+    cs2 = gammabar / gamma;
+    sn2 = theta / gamma;
+    z = rhs / gamma;
+    xxnorm += z * z;
+
+    /// Update norm & conditioning estimates
+
+    // Estimate condition number of Abar -- see eq. (5.10) of the paper "LSQR:
+    // An algorithm for sparse linear equations and sparse least squares"
+    Abar_cond_est = Abar_norm * sqrt(D_Fnorm2);
+
+    // Compute norm of rbar -- see the end of Section 2 of "Algorithm 583. LSQR:
+    // Sparse linear equations and least squares problems"
+    Scalar res1 = phibar * phibar;
+    res2 += psi * psi;
+    rbar_norm = sqrt(res1 + res2);
+
+    // Compute norm of Abar'rbar -- see the end of Section 2 of "Algorithm
+    // 583. LSQR: Sparse linear equations and least squares problems"
+    Abar_rbar_norm = alpha * fabs(tau);
+
+    /// TEST STOPPING CONDITIONS
+    // See Sec. 6 of the paper "LSQR: An algorithm for sparse linear equations
+    // and sparse least squares"
+
+    // Test 1: Check residual norm
+    if (rbar_norm <= btol * bnorm + Atol * Abar_norm * xnorm)
+      break;
+
+    // Test 2: Check relative gradient norm
+    if (Abar_rbar_norm <= Atol * Abar_norm * rbar_norm)
+      break;
+
+    // Test 3:  Check estimated condition number
+    if (Abar_cond_est >= Abar_cond_limit)
+      break;
+  }
+
+  return x;
+}
+
+/// Syntactic sugar -- presents a simplified interface for the case in which the
+/// domain and codomain of the linear operator A have the same type
+template <typename Vector, typename Scalar = double, typename... Args>
+Vector LSQR(const LinearOperator<Vector, Vector, Args...> &A,
+            const LinearOperator<Vector, Vector, Args...> &At, const Vector &b,
+            const InnerProduct<Vector, Scalar, Args...> &inner_product,
+            Args &... args, Scalar &xnorm, size_t &num_iterations,
+            size_t max_iterations = 1000, Scalar lambda = 0, Scalar btol = 1e-6,
+            Scalar Atol = 1e-6, Scalar Abar_cond_limit = 1e8) {
+
+  return LSQR<Vector, Vector, Scalar, Args...>(
+      A, At, b, inner_product, inner_product, args..., xnorm, num_iterations,
+      max_iterations, lambda, btol, Atol, Abar_cond_limit);
+}
+
 } // namespace LinearAlgebra
+// namespace LinearAlgebra
 } // namespace Optimization

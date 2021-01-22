@@ -4,6 +4,7 @@
 #include "Optimization/LinearAlgebra/IterativeSolvers.h"
 
 #include <Eigen/Dense>
+#include <Eigen/QR>
 #include <Eigen/Sparse>
 #include <Eigen/UmfPackSupport>
 
@@ -18,14 +19,14 @@ typedef Eigen::SparseMatrix<Scalar, Eigen::ColMajor> SparseMatrix;
 typedef Eigen::DiagonalMatrix<Scalar, Eigen::Dynamic> DiagonalMatrix;
 typedef Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> Matrix;
 
-/// Dimensions of test problems
-constexpr size_t small_dim = 3;
-constexpr size_t large_dim = 1000;
-constexpr size_t num_constraints = 100;
-
 /// Test tolerances
 Scalar eps_abs = 1e-6;
 Scalar eps_rel = 1e-6;
+
+/// Dimensions of STPCG test problems
+constexpr size_t STPCG_small_dim = 3;
+constexpr size_t STPCG_large_dim = 1000;
+constexpr size_t STPCG_num_constraints = 100;
 
 /// Test fixture for testing the Steihaug-Toint preconditioned conjugate
 /// gradient solver
@@ -81,9 +82,9 @@ protected:
     inner_product = [](const Vector &X, const Vector &Y) { return X.dot(Y); };
 
     // Right-hand side g
-    small_g.resize(small_dim);
+    small_g.resize(STPCG_small_dim);
     small_g << 21, -.4, 19;
-    large_g.resize(large_dim);
+    large_g.resize(STPCG_large_dim);
     large_g.setRandom();
 
     /// Termination criteria for the Steihaug-Toint truncated conjugate gradient
@@ -93,15 +94,15 @@ protected:
 
     // Positive-definite matrix P
     // Manually-constructed small positive-definite matrix
-    small_P.resize(small_dim);
+    small_P.resize(STPCG_small_dim);
     small_P.diagonal() << 1000, 100, 1;
     small_Pop = [&](const Vector &X) { return small_P * X; };
 
     // Sample a large PD Hessian (note that here we are using the fact that
     // Eigen's Random operator returns values in the range [-1, 1]
-    large_P =
-        (2000 * Vector::Ones(large_dim) + 1000 * Vector::Random(large_dim))
-            .asDiagonal();
+    large_P = (2000 * Vector::Ones(STPCG_large_dim) +
+               1000 * Vector::Random(STPCG_large_dim))
+                  .asDiagonal();
 
     large_Pop = [&](const Vector &X) { return large_P * X; };
 
@@ -113,16 +114,16 @@ protected:
     /// Preconditioning operators
 
     // Manually-constructed small positive-definite preconditioner
-    small_M = DiagonalMatrix(small_dim);
+    small_M = DiagonalMatrix(STPCG_small_dim);
     small_M.diagonal() << 100, 10, 1;
     small_MinvOp = [&](const Vector &v) -> std::pair<Vector, Vector> {
       return std::make_pair(small_M.inverse() * v, Vector());
     };
 
     // Randomly-sampled large positive-definite preconditioner
-    large_M =
-        (2000 * Vector::Ones(large_dim) + 1000 * Vector::Random(large_dim))
-            .asDiagonal();
+    large_M = (2000 * Vector::Ones(STPCG_large_dim) +
+               1000 * Vector::Random(STPCG_large_dim))
+                  .asDiagonal();
 
     large_MinvOp = [&](const Vector &v) -> std::pair<Vector, Vector> {
       return std::make_pair(large_M.inverse() * v, Vector());
@@ -142,7 +143,7 @@ TEST_F(STPCGUnitTest, ExactSTPCG) {
 
   Vector s = Optimization::LinearAlgebra::STPCG<Vector, Vector>(
       small_g, small_Pop, inner_product, update_step_norm, num_iterations,
-      Delta, small_dim, kappa, theta);
+      Delta, STPCG_small_dim, kappa, theta);
 
   // Compute ground-truth solution
   Vector s_gt = -(small_P.inverse() * small_g);
@@ -169,7 +170,7 @@ TEST_F(STPCGUnitTest, ExactSTPCGwithNegativeCurvature) {
 
   Vector s = Optimization::LinearAlgebra::STPCG<Vector, Vector>(
       small_g, small_Nop, inner_product, update_step_norm, num_iterations,
-      Delta, small_dim, kappa, theta);
+      Delta, STPCG_small_dim, kappa, theta);
 
   // Compute ground-truth solution
   Vector s_gt = -((Delta / small_g.norm()) * small_g);
@@ -198,7 +199,7 @@ TEST_F(STPCGUnitTest, ExactSTPCGwithPreconditioning) {
 
   Vector s = Optimization::LinearAlgebra::STPCG<Vector, Vector>(
       small_g, small_Pop, inner_product, update_step_norm, num_iterations,
-      Delta, small_dim, kappa, theta, precon_op);
+      Delta, STPCG_small_dim, kappa, theta, precon_op);
 
   // Compute ground-truth solution
   Vector s_gt = -(small_P.inverse() * small_g);
@@ -228,7 +229,7 @@ TEST_F(STPCGUnitTest, ExactSTPCGwithNegativeCurvatureAndPreconditioning) {
 
   Vector s = Optimization::LinearAlgebra::STPCG<Vector, Vector>(
       small_g, small_Nop, inner_product, update_step_norm, num_iterations,
-      Delta, small_dim, kappa, theta, precon_op);
+      Delta, STPCG_small_dim, kappa, theta, precon_op);
 
   /// Compute ground-truth solution
   // Compute initial search direction
@@ -258,7 +259,7 @@ TEST_F(STPCGUnitTest, STPCGwithTruncation) {
 
   Vector s = Optimization::LinearAlgebra::STPCG<Vector, Vector>(
       large_g, large_Pop, inner_product, update_step_norm, num_iterations,
-      Delta, small_dim, kappa, theta);
+      Delta, STPCG_small_dim, kappa, theta);
 
   // Compute norm of residual
   Scalar r_norm = (large_g + large_P * s).norm();
@@ -287,7 +288,7 @@ TEST_F(STPCGUnitTest, STPCGwithPreconditioningAndTruncation) {
 
   Vector s = Optimization::LinearAlgebra::STPCG<Vector, Vector>(
       large_g, large_Pop, inner_product, update_step_norm, num_iterations,
-      Delta, large_dim, kappa, theta, precon_op);
+      Delta, STPCG_large_dim, kappa, theta, precon_op);
 
   // Compute the Minv-norm of the intial residual large_g
   Scalar gMinv_norm = sqrt(large_g.dot(large_M.inverse() * large_g));
@@ -319,7 +320,7 @@ TEST_F(STPCGUnitTest, ExactProjectedSTPCG) {
   Delta = std::numeric_limits<Scalar>::max();
 
   // Sample a random constraint operator A
-  Matrix A = 1000 * Matrix::Random(num_constraints, large_dim);
+  Matrix A = 1000 * Matrix::Random(STPCG_num_constraints, STPCG_large_dim);
 
   /// Compute the solution of this (strictly convex) quadratic program by
   /// solving the KKT system directly:
@@ -329,26 +330,26 @@ TEST_F(STPCGUnitTest, ExactProjectedSTPCG) {
 
   // Somewhat hacky but simple: construct KKT system matrix as a dense matrix by
   // assigning to its blocks
-  Matrix Kdense =
-      Matrix::Zero(large_dim + num_constraints, large_dim + num_constraints);
-  Kdense.topLeftCorner(large_dim, large_dim) = large_P;
-  Kdense.topRightCorner(large_dim, num_constraints) = A.transpose();
-  Kdense.bottomLeftCorner(num_constraints, large_dim) = A;
+  Matrix Kdense = Matrix::Zero(STPCG_large_dim + STPCG_num_constraints,
+                               STPCG_large_dim + STPCG_num_constraints);
+  Kdense.topLeftCorner(STPCG_large_dim, STPCG_large_dim) = large_P;
+  Kdense.topRightCorner(STPCG_large_dim, STPCG_num_constraints) = A.transpose();
+  Kdense.bottomLeftCorner(STPCG_num_constraints, STPCG_large_dim) = A;
 
   // ... and then sparsify
   SparseMatrix K = Kdense.sparseView();
   K.makeCompressed();
 
   // Construct right-hand side vector for KKT system
-  Vector rhs = Vector::Zero(large_dim + num_constraints);
-  rhs.head(large_dim) = -large_g;
+  Vector rhs = Vector::Zero(STPCG_large_dim + STPCG_num_constraints);
+  rhs.head(STPCG_large_dim) = -large_g;
 
   // Solve KKT system using LU factorization
   Eigen::UmfPackLU<SparseMatrix> Kfact(K);
   Vector z = Kfact.solve(rhs);
 
-  Vector s_gt = z.head(large_dim);
-  Vector lambda_star = z.tail(num_constraints);
+  Vector s_gt = z.head(STPCG_large_dim);
+  Vector lambda_star = z.tail(STPCG_num_constraints);
 
   // Verify solution by checking the KKT conditions
   EXPECT_LT((large_g + large_P * s_gt + A.transpose() * lambda_star).norm(),
@@ -362,26 +363,29 @@ TEST_F(STPCGUnitTest, ExactProjectedSTPCG) {
   /// [M A'][x] = [s]
   /// [A 0 ][l] = [0]
 
-  Matrix Mcdense(large_dim + num_constraints, large_dim + num_constraints);
-  Mcdense.topLeftCorner(large_dim, large_dim) = large_M;
-  Mcdense.topRightCorner(large_dim, num_constraints) = A.transpose();
-  Mcdense.bottomLeftCorner(num_constraints, large_dim) = A;
+  Matrix Mcdense(STPCG_large_dim + STPCG_num_constraints,
+                 STPCG_large_dim + STPCG_num_constraints);
+  Mcdense.topLeftCorner(STPCG_large_dim, STPCG_large_dim) = large_M;
+  Mcdense.topRightCorner(STPCG_large_dim, STPCG_num_constraints) =
+      A.transpose();
+  Mcdense.bottomLeftCorner(STPCG_num_constraints, STPCG_large_dim) = A;
 
   SparseMatrix Mc = Mcdense.sparseView();
   Mc.makeCompressed();
 
   // Construct and cache factorization of Pc
   Eigen::UmfPackLU<SparseMatrix> Mcfact(Mc);
-  Vector w = Vector::Zero(large_dim + num_constraints);
+  Vector w = Vector::Zero(STPCG_large_dim + STPCG_num_constraints);
 
   // Construct preconditioning operator
   Optimization::LinearAlgebra::STPCGPreconditioner<Vector, Vector> McOp =
       [&Mcfact, &w](const Vector &r) -> std::pair<Vector, Vector> {
     // Construct and solve constraint preconditioning system
-    w.head(large_dim) = r;
+    w.head(STPCG_large_dim) = r;
     Vector z = Mcfact.solve(w);
 
-    return std::make_pair(z.head(large_dim), z.tail(num_constraints));
+    return std::make_pair(z.head(STPCG_large_dim),
+                          z.tail(STPCG_num_constraints));
   };
 
   std::experimental::optional<
@@ -401,7 +405,7 @@ TEST_F(STPCGUnitTest, ExactProjectedSTPCG) {
   /// assuming an infinite trust-region radius and high-precision tolerance
   Vector s = Optimization::LinearAlgebra::STPCG<Vector, Vector>(
       large_g, large_Pop, inner_product, update_step_norm, num_iterations,
-      Delta, 5 * large_dim, kappa, theta, precon_op, At_op);
+      Delta, 5 * STPCG_large_dim, kappa, theta, precon_op, At_op);
 
   // Verify that the computed update step lies in the null space of the
   // constraint operator A
@@ -425,7 +429,7 @@ TEST_F(STPCGUnitTest, TruncatedPreconditionedProjectedSTPCG) {
   Delta = std::numeric_limits<Scalar>::max();
 
   // Sample a random constraint operator A
-  Matrix A = 1000 * Matrix::Random(num_constraints, large_dim);
+  Matrix A = 1000 * Matrix::Random(STPCG_num_constraints, STPCG_large_dim);
 
   /// Construct constraint preconditioning operator Mc, satisfying:
   ///
@@ -434,26 +438,29 @@ TEST_F(STPCGUnitTest, TruncatedPreconditionedProjectedSTPCG) {
   /// [M A'][x] = [s]
   /// [A 0 ][l] = [0]
 
-  Matrix Mcdense(large_dim + num_constraints, large_dim + num_constraints);
-  Mcdense.topLeftCorner(large_dim, large_dim) = large_M;
-  Mcdense.topRightCorner(large_dim, num_constraints) = A.transpose();
-  Mcdense.bottomLeftCorner(num_constraints, large_dim) = A;
+  Matrix Mcdense(STPCG_large_dim + STPCG_num_constraints,
+                 STPCG_large_dim + STPCG_num_constraints);
+  Mcdense.topLeftCorner(STPCG_large_dim, STPCG_large_dim) = large_M;
+  Mcdense.topRightCorner(STPCG_large_dim, STPCG_num_constraints) =
+      A.transpose();
+  Mcdense.bottomLeftCorner(STPCG_num_constraints, STPCG_large_dim) = A;
 
   SparseMatrix Mc = Mcdense.sparseView();
   Mc.makeCompressed();
 
   // Construct and cache factorization of Pc
   Eigen::UmfPackLU<SparseMatrix> Mcfact(Mc);
-  Vector w = Vector::Zero(large_dim + num_constraints);
+  Vector w = Vector::Zero(STPCG_large_dim + STPCG_num_constraints);
 
   // Construct preconditioning operator
   Optimization::LinearAlgebra::STPCGPreconditioner<Vector, Vector> McOp =
       [&Mcfact, &w](const Vector &r) -> std::pair<Vector, Vector> {
     // Construct and solve constraint preconditioning system
-    w.head(large_dim) = r;
+    w.head(STPCG_large_dim) = r;
     Vector z = Mcfact.solve(w);
 
-    return std::make_pair(z.head(large_dim), z.tail(num_constraints));
+    return std::make_pair(z.head(STPCG_large_dim),
+                          z.tail(STPCG_num_constraints));
   };
 
   std::experimental::optional<
@@ -472,7 +479,7 @@ TEST_F(STPCGUnitTest, TruncatedPreconditionedProjectedSTPCG) {
   /// Approximately solve linearly-constrained trust-region subproblem
   Vector s = Optimization::LinearAlgebra::STPCG<Vector, Vector>(
       large_g, large_Pop, inner_product, update_step_norm, num_iterations,
-      Delta, 5 * large_dim, kappa, theta, precon_op, At_op);
+      Delta, 5 * STPCG_large_dim, kappa, theta, precon_op, At_op);
 
   /// Verify that the target fractional reduction in the P-norm of the residual
   /// is satisfied by the returned update
@@ -488,4 +495,184 @@ TEST_F(STPCGUnitTest, TruncatedPreconditionedProjectedSTPCG) {
   Scalar s_M_norm = sqrt(s.dot(large_M * s));
 
   EXPECT_LT(fabs(s_M_norm - update_step_norm) / s_M_norm, eps_rel);
+}
+
+/// Test fixture for testing the LSQR linear least-squares solver
+class LSQRUnitTest : public testing::Test {
+protected:
+  /// Set up variables and functions used in the following tests
+
+  // Inner product between Vectors
+  Optimization::LinearAlgebra::InnerProduct<Vector> inner_product;
+
+  // Linear operators A and At
+  Optimization::LinearAlgebra::LinearOperator<Vector, Vector> A_op;
+  Optimization::LinearAlgebra::LinearOperator<Vector, Vector> At_op;
+
+  virtual void SetUp() {
+
+    // Inner product
+    inner_product = [](const Vector &X, const Vector &Y) { return X.dot(Y); };
+  }
+};
+
+/// Test LSQR on an inconsistent linear system where x = 0 is already a
+/// stationary point for the loss function
+TEST_F(LSQRUnitTest, TrivialSolution) {
+
+  /// Simple test problem: try
+  ///
+  /// A = [0 0]
+  ///     [1 0]
+  ///     [0 1]
+  ///
+  /// b = [1, 0, 0];
+  ///
+  /// Note that this is an inconsistent linear system, but A'b = 0, and
+  /// therefore x = 0 is already a stationary point for the least-squares loss
+  /// function.  Consequently, LSQR should return immediately with x = 0
+
+  Matrix A = Matrix::Zero(3, 2);
+  A.bottomRows(2) = Matrix::Identity(2, 2);
+
+  Vector b = Vector::Zero(3);
+  b(0) = 1;
+
+  // Set up linear operators
+  A_op = [&A](const Vector &x) -> Vector { return A * x; };
+  At_op = [&A](const Vector &x) -> Vector { return A.transpose() * x; };
+
+  // Run LSQR!
+  Scalar xnorm;
+  size_t num_iterations;
+  Vector x = Optimization::LinearAlgebra::LSQR<Vector>(
+      A_op, At_op, b, inner_product, xnorm, num_iterations);
+
+  /// Verify that LSQR terminated immediately
+  EXPECT_EQ(num_iterations, 0);
+
+  /// Verify that the reported norm of x is correct
+  EXPECT_LT(fabs(x.norm() - xnorm), eps_abs);
+
+  /// Verify that the returned x == 0
+  EXPECT_LT(xnorm, eps_abs);
+}
+
+/// Test LSQR on a simple overdetermined but consistent least-squares problem
+TEST_F(LSQRUnitTest, ConsistentOverdeterminedLeastSquares) {
+
+  // Set up a small linear system
+  Matrix A(4, 3);
+  A << 10, 5, 10, 2, 9, 8, 10, 2, 10, 10, 5, 7;
+
+  // Construct ground-truth vector x
+  Vector xtrue(3);
+  xtrue << 1.0, 2.0, 3.0;
+
+  // Sample right-hand side vector b
+  Vector b = A * xtrue;
+
+  // Set up linear operators
+  A_op = [&A](const Vector &x) -> Vector { return A * x; };
+  At_op = [&A](const Vector &x) -> Vector { return A.transpose() * x; };
+
+  // Run LSQR!
+  size_t max_iterations = 1000;
+  Scalar xnorm;
+  size_t num_iterations;
+  Vector x = Optimization::LinearAlgebra::LSQR<Vector>(
+      A_op, At_op, b, inner_product, xnorm, num_iterations, max_iterations, 0.0,
+      eps_rel);
+
+  // Compute residual of returned solution
+  Vector r = A * x - b;
+
+  /// Verify that the returned solution satisfies the required reduction in
+  /// relative residual
+  EXPECT_LT(r.norm(), b.norm() * eps_rel);
+
+  /// Verify that the reported norm of x is accurate
+  EXPECT_LT(fabs(xnorm - x.norm()), eps_rel * x.norm());
+
+  /// Verify that LSQR performed a reasonable number of iterations
+  EXPECT_LT(num_iterations, 4 * A.cols());
+}
+
+/// Test LSQR on a simple *inconsistent* least-squares problem
+TEST_F(LSQRUnitTest, InconsistentLeastSquares) {
+
+  // Set up a small *inconsistent* linear system
+  Matrix A(4, 3);
+  A << 10, 5, 10, 2, 9, 8, 10, 2, 10, 10, 5, 7;
+
+  Vector b(4);
+  b << 1, 9, 10, 2;
+
+  // Compute ground-truth solution x
+  Eigen::FullPivHouseholderQR<Matrix> qr(A);
+  Vector xtrue = qr.solve(b);
+
+  // Set up linear operators
+  A_op = [&A](const Vector &x) -> Vector { return A * x; };
+  At_op = [&A](const Vector &x) -> Vector { return A.transpose() * x; };
+
+  // Run LSQR!
+  size_t max_iterations = 1000;
+  Scalar xnorm;
+  size_t num_iterations;
+  Vector x = Optimization::LinearAlgebra::LSQR<Vector>(
+      A_op, At_op, b, inner_product, xnorm, num_iterations, max_iterations, 0.0,
+      0.0, eps_rel);
+
+  /// Verify that the computed x is close to the correct solution
+  EXPECT_LT((x - xtrue).norm(), x.norm());
+
+  /// Verify that the reported norm of x is accurate
+  EXPECT_LT(fabs(xnorm - x.norm()), eps_rel * x.norm());
+
+  /// Verify that LSQR performed a reasonable number of iterations
+  EXPECT_LT(num_iterations, 4 * A.cols());
+}
+
+/// Test LSQR on a Tikhonov-regularized linear system
+TEST_F(LSQRUnitTest, RegularizedLeastSquares) {
+
+  // Set up a small regularized linear least-squares problem
+  Matrix A(4, 3);
+  A << 10, 5, 10, 2, 9, 8, 10, 2, 10, 10, 5, 7;
+
+  Vector b(4);
+  b << 1, 9, 10, 2;
+
+  Scalar lambda = 1.0;
+
+  /// Compute solution for this small example using the normal equations
+
+  // Compute Tikhonov-regularized coefficient matrix M := A'A + lambda*I
+  Matrix M = A.transpose() * A + lambda * Matrix::Identity(3, 3);
+
+  // Compute ground-truth solution x
+  Eigen::FullPivHouseholderQR<Matrix> qr(M);
+  Vector xtrue = qr.solve(A.transpose() * b);
+
+  // Set up linear operators
+  A_op = [&A](const Vector &x) -> Vector { return A * x; };
+  At_op = [&A](const Vector &x) -> Vector { return A.transpose() * x; };
+
+  // Run LSQR!
+  size_t max_iterations = 1000;
+  Scalar xnorm;
+  size_t num_iterations;
+  Vector x = Optimization::LinearAlgebra::LSQR<Vector>(
+      A_op, At_op, b, inner_product, xnorm, num_iterations, max_iterations,
+      lambda, 0.0, eps_rel);
+
+  /// Verify that the computed x is close to the correct solution
+  EXPECT_LT((x - xtrue).norm(), x.norm());
+
+  /// Verify that the reported norm of x is accurate
+  EXPECT_LT(fabs(xnorm - x.norm()), eps_rel * x.norm());
+
+  /// Verify that LSQR performed a reasonable number of iterations
+  EXPECT_LT(num_iterations, 4 * A.cols());
 }
