@@ -54,22 +54,6 @@ add_executable(ADMM_example ${CMAKE_CURRENT_SOURCE_DIR}/ADMM_example.cpp)
 target_link_libraries(ADMM_example Optimization)
 
 
-#if(OPENMP_FOUND)
-# Add additional compilation flags to enable OpenMP support
-#set_target_properties(Riemannian_optimization_example PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
-#set_target_properties(Riemannian_optimization_example PROPERTIES LINK_FLAGS "-fopenmp")
-
-#set_target_properties(Euclidean_optimization_example PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
-#set_target_properties(Euclidean_optimization_example PROPERTIES LINK_FLAGS "-fopenmp")
-
-#set_target_properties(proximal_gradient_example PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
-#set_target_properties(proximal_gradient_example PROPERTIES LINK_FLAGS "-fopenmp")
-
-#set_target_properties(ADMM_example PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
-#set_target_properties(ADMM_example PROPERTIES LINK_FLAGS "-fopenmp")
-#endif()
-
-
 
 
 
