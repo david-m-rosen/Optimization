@@ -634,6 +634,61 @@ TEST_F(LSQRUnitTest, InconsistentLeastSquares) {
   EXPECT_LT(num_iterations, 4 * A.cols());
 }
 
+/// Test LSQR on a simple *inconsistent* least-squares problem, enforcing a
+/// trust-region constraint
+TEST_F(LSQRUnitTest, InconsistentLeastSquaresWithTrustRegion) {
+
+  // Set up a small *inconsistent* linear system
+  Matrix A(4, 3);
+  A << 10, 5, 10, 2, 9, 8, 10, 2, 10, 10, 5, 7;
+
+  Vector b(4);
+  b << 1, 9, 10, 2;
+
+  // Compute ground-truth solution x
+  Eigen::FullPivHouseholderQR<Matrix> qr(A);
+  Vector xLS = qr.solve(b);
+
+  // Get the norm of the LS solution
+  Scalar xLS_norm = xLS.norm();
+
+  // Note that since xLS solves the normal equations, it is *also* the
+  // *minimum-norm* least-squares solution.  Therefore, by setting the
+  // trust-region radius Delta to be less than xLS_norm, we can ensure that the
+  // trust-region constraint will be binding for the resulting LS problem
+
+  Scalar Delta = xLS_norm / 2;
+
+  // Set up linear operators
+  A_op = [&A](const Vector &x) -> Vector { return A * x; };
+  At_op = [&A](const Vector &x) -> Vector { return A.transpose() * x; };
+
+  // Run LSQR!
+  size_t max_iterations = 1000;
+  Scalar xnorm;
+  size_t num_iterations;
+  Vector x = Optimization::LinearAlgebra::LSQR<Vector>(
+      A_op, At_op, b, inner_product, xnorm, num_iterations, max_iterations, 0.0,
+      0.0, 0.0, 1e12, Delta);
+
+  // Compute residual norm for solution
+  Vector r = A * x - b;
+
+  /// Verify that LSQR performed a reasonable number of iterations
+  EXPECT_LT(num_iterations, 4 * A.cols());
+
+  /// Verify that the reported norm of x is accurate
+  EXPECT_LT(fabs(xnorm - x.norm()), eps_rel * x.norm());
+
+  /// Verify that the solution returned by LSQR terminated on the trust-region
+  /// boundary
+  EXPECT_LT(fabs(xnorm - Delta), eps_abs);
+
+  /// Verify that the returned solution does in fact reduce the least-squares
+  /// residual
+  EXPECT_LT(r.norm(), b.norm());
+}
+
 /// Test LSQR on a Tikhonov-regularized linear system
 TEST_F(LSQRUnitTest, RegularizedLeastSquares) {
 

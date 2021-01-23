@@ -429,14 +429,48 @@ Vector STPCG(const Vector &g, const SymmetricLinearOperator<Vector, Args...> &H,
   return s_k;
 }
 
+/** An alias template for a user-definable function that can be
+ * used to access various interesting bits of information about the internal
+ * state of the LSQR algorithm as it runs.
+ *
+ * - k: Index of current iteration
+ * - A:  Coefficient operator A
+ * - At:  Transpose of coefficient operator A
+ * - b:  Constant vector b
+ * - xk: Estimated solution
+ * - xk_norm:  Solution norm
+ * - rbar_norm:  Norm of residual rbar(x) := Abar*x - bbar
+ * - Abar_rbar_norm:  Norm of Abar'rbar
+ * - Abar_norm_est:  Estimate for the norm of Abar
+ * - Abar_cond_est:  Estimate for the condition number of Abar
+ *
+ * Note that this function is called at the *end* of each iteration (i.e.,
+ * *after* each of the above quantities have been updated)
+ *
+ * This function may also return the Boolean value 'true' in order to
+ * terminate the LSQR algorithm; this provides a convenient means of
+ * implementing a custom (user-definable) stopping criterion.
+ */
+template <typename VectorX, typename VectorY, typename Scalar = double,
+          typename... Args>
+using LSQRUserFunction = std::function<bool(
+    size_t k, const LinearOperator<VectorX, VectorY, Args...> &A,
+    const LinearOperator<VectorY, VectorX, Args...> &At, const VectorY &b,
+    const VectorX &xk, Scalar xk_norm, Scalar rbar_norm, Scalar Abar_rbar_norm,
+    Scalar Abar_norm_est, Scalar Abar_cond_est, Args &... args)>;
+
 /** This function implements (a slightly modified version of) the LSQR algorithm
  * for approximately solving linear least-squares problems of the form:
  *
  *     min_x  |Ax - b|^2 + lambda * |x|^2
  *
+ *     s.t.   |x| <= Delta
+ *
  * Note that this problem is equivalent to:
  *
  *     min_x  |Abar*x - bbar|^2
+ *
+ *     s.t.   |x| <= Delta
  *
  * with
  *
@@ -448,7 +482,8 @@ Vector STPCG(const Vector &g, const SymmetricLinearOperator<Vector, Args...> &H,
  *
  * This specific implementation is based upon the MATLAB implementation provided
  * by the Stanford Systems Optimization Laboratory, although modified to employ
- * alternative termination criteria.  See the references:
+ * alternative termination criteria (including a trust-region constraint). See
+ * the references:
  *
  * - "LSQR: An algorithm for sparse linear equations and sparse least squares",
  *   by C.C. Paige and M.A. Saunders
@@ -474,10 +509,11 @@ Vector STPCG(const Vector &g, const SymmetricLinearOperator<Vector, Args...> &H,
  * - num_iterations: upon termination, this is set to the number of iterations
  *   executed by the algorithm
  *
- * - max_iterations: maximum number of iterations
+ * - max_iterations: An optional argument specifying the maximum number of
+ *   iterations to perform [default: 1000].
  *
  * - lambda: an optional Tikhonov regularization parameter for the least-squares
- *   problem
+ *   problem [default: 0]
  *
  * - btol and Atol are relative error tolerances defining the stopping criteria
  *   for the algorithm: the method will terminate if *either* of the following
@@ -493,6 +529,9 @@ Vector STPCG(const Vector &g, const SymmetricLinearOperator<Vector, Args...> &H,
  *   *gradient* g(x) := 2*Abar'rbar, and so is appropriate for use with
  *   *inconsistent* linear systems.
  *
+ *   Default values are btol = 1e-6 and atol = 1e-6, corresponding to a
+ *   relatively precise least-squares solution.
+ *
  *   See Section 6 of the paper LSQR: An algorithm for sparse linear equations
  *   and sparse least squares" for more detail on the use of these criteria.
  *
@@ -502,6 +541,17 @@ Vector STPCG(const Vector &g, const SymmetricLinearOperator<Vector, Args...> &H,
  *   intended to regularize ill-conditioned linear systems.  Again, see Section
  *   6 of the paper LSQR: An algorithm for sparse linear equations and sparse
  *   least squares" for more detail on the use of this criterion.
+ *
+ *   Default value: 1e8
+ *
+ * - Delta: An optional trust-region radius for the least-squares problem
+ *   [default value: infinity].  This provides direct control over the norm of
+ *   the returned solution, which is useful in the context of trust-region
+ *   optimization algorithms
+ *
+ * - user_function is an optional user-defined function that can be used to
+ *   inspect various variables of interest as the algorithm runs, and
+ *   (optionally) to define a custom stopping criterion for the algorithm.
  */
 template <typename VectorX, typename VectorY, typename Scalar = double,
           typename... Args>
@@ -512,7 +562,11 @@ LSQR(const LinearOperator<VectorX, VectorY, Args...> &A,
      const InnerProduct<VectorY, Scalar, Args...> &inner_product_y,
      Args &... args, Scalar &xnorm, size_t &num_iterations,
      size_t max_iterations = 1000, Scalar lambda = 0, Scalar btol = 1e-6,
-     Scalar Atol = 1e-6, Scalar Abar_cond_limit = 1e8) {
+     Scalar Atol = 1e-6, Scalar Abar_cond_limit = 1e8,
+     Scalar Delta = sqrt(std::numeric_limits<Scalar>::max()),
+     const std::experimental::optional<
+         LSQRUserFunction<VectorX, VectorY, Scalar, Args...>> &user_function =
+         std::experimental::nullopt) {
 
   /// INITIALIZATION
 
@@ -530,7 +584,7 @@ LSQR(const LinearOperator<VectorX, VectorY, Args...> &A,
   Scalar xxnorm = 0;
 
   // Estimate for the norm of Abar
-  Scalar Abar_norm = 0;
+  Scalar Abar_norm_est = 0;
 
   // Estimate for the condition number kappa(Abar) := |Abar|*|Abar^+|
   Scalar Abar_cond_est = 0;
@@ -641,8 +695,8 @@ LSQR(const LinearOperator<VectorX, VectorY, Args...> &A,
       u /= beta;
 
       // Update estimate of norm of A
-      Abar_norm =
-          sqrt(Abar_norm * Abar_norm + alpha * alpha + beta * beta + lambda);
+      Abar_norm_est = sqrt(Abar_norm_est * Abar_norm_est + alpha * alpha +
+                           beta * beta + lambda);
 
       // Compute next v, alpha
       v = At(u, args...) - beta * v;
@@ -673,23 +727,7 @@ LSQR(const LinearOperator<VectorX, VectorY, Args...> &A,
     rhobar = -cs * alpha;
     Scalar phi = cs * phibar;
     phibar *= sn;
-
     Scalar tau = sn * phi;
-
-    /// UPDATE X AND W
-
-    Scalar t1 = phi / rho;    // Stepsize for x
-    Scalar t2 = -theta / rho; // Stepsize for w
-
-    // Record norm of dk := (1/rho) * wk
-    Scalar dk2 = inner_product_x(w, w, args...) / (rho * rho);
-
-    /// Update vectors!
-    x += t1 * w;
-    w = v + t2 * w;
-
-    // Update squared Frobenius norm of D, using |dk|^2 = |wk|^2 / rho^2
-    D_Fnorm2 += dk2;
 
     /// Use a plane rotation on the right to eliminate the super-diagonal
     /// element (theta) of the upper-bidiagonal matrix.  Then use the result to
@@ -699,18 +737,58 @@ LSQR(const LinearOperator<VectorX, VectorY, Args...> &A,
     Scalar gammabar = -cs2 * rho;
     Scalar rhs = phi - delta * z;
     Scalar zbar = rhs / gammabar;
-    xnorm = sqrt(xxnorm + zbar * zbar);
     Scalar gamma = sqrt(gammabar * gammabar + theta * theta);
     cs2 = gammabar / gamma;
     sn2 = theta / gamma;
     z = rhs / gamma;
+
+    /// UPDATE X AND W
+
+    // Compute norms of wk and dk := (1/rho) * wk
+    Scalar wk2 = inner_product_x(w, w, args...);
+    Scalar dk2 = wk2 / (rho * rho);
+
+    // Update update norm of x *AFTER* update is applied
+    xnorm = sqrt(xxnorm + zbar * zbar);
     xxnorm += z * z;
+
+    Scalar t2 = -theta / rho; // Update stepsize for w
+    Scalar t1;                // Update stepsize for x
+
+    // Check whether applying the *full* update would cause x to leave the
+    // trust-region
+    if (xnorm <= Delta) {
+      // Use the full update step
+      t1 = phi / rho;
+    } else {
+      // Applying the full update would cause x to leave the trust-region --
+      // compute a shorter stepsize t1 such that x + t1 * w terminates on the
+      // trust-region boundary instead
+
+      Scalar xtx = inner_product_x(x, x, args...);
+      Scalar wtx = inner_product_x(w, x, args...);
+
+      // Compute steplength
+      t1 = (-wtx + sqrt(wtx * wtx + wk2 * (Delta * Delta - xtx))) / wk2;
+
+      // Update xnorm to reflect the fact that this step will terminate on the
+      // boundary
+      xnorm = Delta;
+    }
+
+    /// Update vectors!
+
+    x += t1 * w;
+    w = v + t2 * w;
+
+    // Update squared Frobenius norm of D, using |dk|^2 = |wk|^2 / rho^2
+    D_Fnorm2 += dk2;
 
     /// Update norm & conditioning estimates
 
     // Estimate condition number of Abar -- see eq. (5.10) of the paper "LSQR:
     // An algorithm for sparse linear equations and sparse least squares"
-    Abar_cond_est = Abar_norm * sqrt(D_Fnorm2);
+    Abar_cond_est = Abar_norm_est * sqrt(D_Fnorm2);
 
     // Compute norm of rbar -- see the end of Section 2 of "Algorithm 583. LSQR:
     // Sparse linear equations and least squares problems"
@@ -727,16 +805,33 @@ LSQR(const LinearOperator<VectorX, VectorY, Args...> &A,
     // and sparse least squares"
 
     // Test 1: Check residual norm
-    if (rbar_norm <= btol * bnorm + Atol * Abar_norm * xnorm)
+    if (rbar_norm <= btol * bnorm + Atol * Abar_norm_est * xnorm)
       break;
 
     // Test 2: Check relative gradient norm
-    if (Abar_rbar_norm <= Atol * Abar_norm * rbar_norm)
+    if (Abar_rbar_norm <= Atol * Abar_norm_est * rbar_norm)
       break;
 
     // Test 3:  Check estimated condition number
     if (Abar_cond_est >= Abar_cond_limit)
       break;
+
+    // Test 4:  Check trust-region radius
+    if (xnorm >= Delta) {
+      // The current estimate has reached the trust-region boundary, so
+      // terminate
+      break;
+    }
+
+    // Call user-supplied function, if one was passed
+    /// Call user-supplied function, if one was passed
+    if (user_function &&
+        (*user_function)(num_iterations, A, At, b, x, xnorm, rbar_norm,
+                         Abar_rbar_norm, Abar_norm_est, Abar_cond_est,
+                         args...)) {
+      // User-defined stopping criterion just fired
+      break;
+    }
   }
 
   return x;
@@ -745,18 +840,23 @@ LSQR(const LinearOperator<VectorX, VectorY, Args...> &A,
 /// Syntactic sugar -- presents a simplified interface for the case in which the
 /// domain and codomain of the linear operator A have the same type
 template <typename Vector, typename Scalar = double, typename... Args>
-Vector LSQR(const LinearOperator<Vector, Vector, Args...> &A,
-            const LinearOperator<Vector, Vector, Args...> &At, const Vector &b,
-            const InnerProduct<Vector, Scalar, Args...> &inner_product,
-            Args &... args, Scalar &xnorm, size_t &num_iterations,
-            size_t max_iterations = 1000, Scalar lambda = 0, Scalar btol = 1e-6,
-            Scalar Atol = 1e-6, Scalar Abar_cond_limit = 1e8) {
+Vector
+LSQR(const LinearOperator<Vector, Vector, Args...> &A,
+     const LinearOperator<Vector, Vector, Args...> &At, const Vector &b,
+     const InnerProduct<Vector, Scalar, Args...> &inner_product, Args &... args,
+     Scalar &xnorm, size_t &num_iterations, size_t max_iterations = 1000,
+     Scalar lambda = 0, Scalar btol = 1e-6, Scalar Atol = 1e-6,
+     Scalar Abar_cond_limit = 1e8,
+     Scalar Delta = sqrt(std::numeric_limits<Scalar>::max()),
+     const std::experimental::optional<
+         LSQRUserFunction<Vector, Vector, Scalar, Args...>> &user_function =
+         std::experimental::nullopt) {
 
   return LSQR<Vector, Vector, Scalar, Args...>(
       A, At, b, inner_product, inner_product, args..., xnorm, num_iterations,
-      max_iterations, lambda, btol, Atol, Abar_cond_limit);
+      max_iterations, lambda, btol, Atol, Abar_cond_limit, Delta,
+      user_function);
 }
 
 } // namespace LinearAlgebra
-// namespace LinearAlgebra
 } // namespace Optimization
