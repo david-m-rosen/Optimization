@@ -568,6 +568,28 @@ LSQR(const LinearOperator<VectorX, VectorY, Args...> &A,
          LSQRUserFunction<VectorX, VectorY, Scalar, Args...>> &user_function =
          std::experimental::nullopt) {
 
+  /// Argument checking
+
+  if (lambda < 0)
+    throw std::invalid_argument("Tikhonov regularization parameter (lambda) "
+                                "must be a nonnegative real value");
+
+  if (btol < 0)
+    throw std::invalid_argument(
+        "Stopping tolerance btol must be a nonnegative real number");
+
+  if (Atol < 0)
+    throw std::invalid_argument(
+        "Stopping tolerance Atol must be a nonnegative real number");
+
+  if (Abar_cond_limit <= 0)
+    throw std::invalid_argument(
+        "Stopping tolerance Abar_cond_limit must be a positive real number");
+
+  if (Delta <= 0)
+    throw std::invalid_argument(
+        "Trust-region radius (Delta) must be a positive real value");
+
   /// INITIALIZATION
 
   // Allocate output vector x

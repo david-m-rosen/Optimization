@@ -690,7 +690,7 @@ TEST_F(LSQRUnitTest, InconsistentLeastSquaresWithTrustRegion) {
 }
 
 /// Test LSQR on a Tikhonov-regularized linear system
-TEST_F(LSQRUnitTest, RegularizedLeastSquares) {
+TEST_F(LSQRUnitTest, TikhonovRegularizedLeastSquares) {
 
   // Set up a small regularized linear least-squares problem
   Matrix A(4, 3);
