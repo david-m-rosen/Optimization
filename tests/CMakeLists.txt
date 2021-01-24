@@ -34,6 +34,7 @@ enable_testing()
 set(TEST_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/IterativeSolvers_unit_test.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/TNLS_unit_test.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/GradientDescent_unit_test.cpp
 )
 
@@ -44,6 +45,9 @@ target_link_libraries(IterativeSolvers_unit_test Optimization ${UMFPACK_LIBRARIE
 
 add_executable(TNT_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp)
 target_link_libraries(TNT_unit_test Optimization gtest_main)
+
+add_executable(TNLS_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/TNLS_unit_test.cpp)
+target_link_libraries(TNLS_unit_test Optimization gtest_main)
 
 add_executable(GradientDescent_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/GradientDescent_unit_test.cpp)
 target_link_libraries(GradientDescent_unit_test Optimization gtest_main)

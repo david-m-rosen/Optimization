@@ -171,9 +171,15 @@ template <typename Vector, typename... Args>
 using EuclideanQuadraticModel = QuadraticModel<Vector, Vector, Args...>;
 
 template <typename Vector, typename Scalar = double, typename... Args>
+Scalar EuclideanInnerProduct(const Vector &V1, const Vector &V2,
+                             Args &... args) {
+  return V1.dot(V2);
+}
+
+template <typename Vector, typename Scalar = double, typename... Args>
 Scalar EuclideanMetric(const Vector &X, const Vector &V1, const Vector &V2,
                        Args &... args) {
-  return V1.dot(V2);
+  return EuclideanInnerProduct<Vector, Scalar, Args...>(V1, V2, args...);
 }
 
 template <typename Vector, typename... Args>
