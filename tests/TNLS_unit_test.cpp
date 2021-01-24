@@ -57,7 +57,7 @@ protected:
   Optimization::Riemannian::JacobianPairFunction<Vector, Vector, Vector>
       JacFunc;
 
-  virtual void SetUp() {
+  virtual void SetUp() override {
 
     // Set of test points x
     x = Vector::LinSpaced(m, -M_PI, M_PI);
@@ -180,6 +180,12 @@ TEST_F(TNLSUnitTest, LeastSquaresParameterFitting) {
   /// of sufficient small residual norm
   EXPECT_EQ(result.status, Optimization::Riemannian::TNLSStatus::Gradient);
 
-  /// Verify that the residual at the returned estimate is sufficiently small
+  /// Verify that the gradient of the least-squares objective at the returned
+  /// estimate is sufficiently small
   EXPECT_LT(gradLbeta.norm(), eps_abs);
+
+  /// Verify that the residual at the returned solution is *strictly smaller*
+  /// than the norm of the noise that was added (i.e., the residual at the
+  /// planted signal)
+  EXPECT_LT(Fbeta.norm(), z.norm());
 }
