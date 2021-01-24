@@ -331,10 +331,10 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
   Variable x, x_proposed;
 
   // Function value at the current iterate and proposed iterate
-  Scalar f_x, f_x_proposed;
+  Scalar fx, fx_proposed;
 
   // Gradient and preconditioned gradient at the current iterate
-  Scalar grad_f_x_norm, preconditioned_grad_f_x_norm;
+  Scalar gradfx_norm, preconditioned_gradfx_norm;
 
   // Trust-region radius
   Scalar Delta;
@@ -362,21 +362,21 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
   // Set initial iterate ...
   x = x0;
   // Function value ...
-  f_x = f(x, args...);
+  fx = f(x, args...);
 
   // And local quadratic model
   QM(x, grad, Hess, args...);
 
-  grad_f_x_norm = sqrt(metric(x, grad, grad, args...));
+  gradfx_norm = sqrt(metric(x, grad, grad, args...));
   if (precon) {
     // Precondition gradient
     Tangent preconditioned_gradient = (*precon)(x, grad, args...);
-    preconditioned_grad_f_x_norm = sqrt(
+    preconditioned_gradfx_norm = sqrt(
         metric(x, preconditioned_gradient, preconditioned_gradient, args...));
   } else {
     // We use the identity preconditioner, so the norms of the gradient and
     // preconditioned gradient are identical
-    preconditioned_grad_f_x_norm = grad_f_x_norm;
+    preconditioned_gradfx_norm = gradfx_norm;
   }
 
   /// Set up function handles for inner STPCG linear system solver
@@ -442,10 +442,9 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
     // Record output
     result.time.push_back(elapsed_time);
-    result.objective_values.push_back(f_x);
-    result.gradient_norms.push_back(grad_f_x_norm);
-    result.preconditioned_gradient_norms.push_back(
-        preconditioned_grad_f_x_norm);
+    result.objective_values.push_back(fx);
+    result.gradient_norms.push_back(gradfx_norm);
+    result.preconditioned_gradient_norms.push_back(preconditioned_gradfx_norm);
     result.trust_region_radius.push_back(Delta);
 
     if (params.log_iterates)
@@ -456,17 +455,16 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
       std::cout.width(iter_field_width);
       std::cout << iteration << ", time: " << elapsed_time << ", f: ";
       std::cout.width(params.precision + 7);
-      std::cout << f_x << ", |g|: " << grad_f_x_norm
-                << ", |M^{-1}g|: " << preconditioned_grad_f_x_norm;
+      std::cout << fx << ", |g|: " << gradfx_norm
+                << ", |M^{-1}g|: " << preconditioned_gradfx_norm;
     }
 
     // Test gradient-based stopping criterion
-    if (grad_f_x_norm < params.gradient_tolerance) {
+    if (gradfx_norm < params.gradient_tolerance) {
       result.status = TNTStatus::Gradient;
       break;
     }
-    if (preconditioned_grad_f_x_norm <
-        params.preconditioned_gradient_tolerance) {
+    if (preconditioned_gradfx_norm < params.preconditioned_gradient_tolerance) {
       result.status = TNTStatus::PreconditionedGradient;
       break;
     }
@@ -496,17 +494,17 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     x_proposed = retract(x, h, args...);
 
     // Evalute objective at trial point
-    f_x_proposed = f(x_proposed, args...);
+    fx_proposed = f(x_proposed, args...);
 
     // Predicted model decrease
     Scalar dm = -metric(x, grad, h, args...) -
                 .5 * metric(x, h, Hess(x, h, args...), args...);
 
     // Actual function decrease
-    Scalar df = f_x - f_x_proposed;
+    Scalar df = fx - fx_proposed;
 
     // Relative function decrease
-    relative_decrease = df / (sqrt_eps + fabs(f_x));
+    relative_decrease = df / (sqrt_eps + fabs(fx));
 
     // Evaluate gain ratio
     Scalar rho = df / dm;
@@ -534,7 +532,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     // Call the user-supplied function to provide access to internal algorithm
     // state, and check for user-requested termination
     if (user_function) {
-      if ((*user_function)(iteration, elapsed_time, x, f_x, grad, Hess, Delta,
+      if ((*user_function)(iteration, elapsed_time, x, fx, grad, Hess, Delta,
                            inner_iterations, h, df, rho, step_accepted,
                            args...)) {
         result.status = TNTStatus::UserFunction;
@@ -546,7 +544,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     if (step_accepted) {
       // Accept iterate and cache values ...
       x = std::move(x_proposed);
-      f_x = f_x_proposed;
+      fx = fx_proposed;
 
       // Test relative decrease-based stopping criterion
       if (relative_decrease < params.relative_decrease_tolerance) {
@@ -563,16 +561,16 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
       // ... and recompute the local quadratic model at the current iterate
       QM(x, grad, Hess, args...);
 
-      grad_f_x_norm = sqrt(metric(x, grad, grad, args...));
+      gradfx_norm = sqrt(metric(x, grad, grad, args...));
       if (precon) {
         // Precondition gradient
         Tangent preconditioned_gradient = (*precon)(x, grad, args...);
-        preconditioned_grad_f_x_norm = sqrt(metric(
+        preconditioned_gradfx_norm = sqrt(metric(
             x, preconditioned_gradient, preconditioned_gradient, args...));
       } else {
         // We use the identity preconditioner, so the norms of the gradient
         // and preconditioned gradient are identical
-        preconditioned_grad_f_x_norm = grad_f_x_norm;
+        preconditioned_gradfx_norm = gradfx_norm;
       }
 
     } // if (step_accepted)
@@ -600,9 +598,9 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
   // Record output
   result.x = x;
-  result.f = f_x;
-  result.grad_f_x_norm = grad_f_x_norm;
-  result.preconditioned_grad_f_x_norm = preconditioned_grad_f_x_norm;
+  result.f = fx;
+  result.gradfx_norm = gradfx_norm;
+  result.preconditioned_grad_f_x_norm = preconditioned_gradfx_norm;
 
   if (params.verbose) {
     std::cout << std::endl
@@ -613,12 +611,12 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     switch (result.status) {
     case TNTStatus::Gradient:
       std::cout << "Found first-order critical point! (Gradient norm: "
-                << grad_f_x_norm << ")" << std::endl;
+                << gradfx_norm << ")" << std::endl;
       break;
     case TNTStatus::PreconditionedGradient:
       std::cout << "Found first-order critical point! (Preconditioned "
                    "gradient norm: "
-                << preconditioned_grad_f_x_norm << ")" << std::endl;
+                << preconditioned_gradfx_norm << ")" << std::endl;
       break;
     case TNTStatus::RelativeDecrease:
       std::cout
@@ -653,7 +651,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     }
 
     std::cout << "Final objective value: " << result.f << std::endl;
-    std::cout << "Norm of Riemannian gradient: " << result.grad_f_x_norm
+    std::cout << "Norm of Riemannian gradient: " << result.gradfx_norm
               << std::endl;
     std::cout << "Norm of preconditioned Riemannian gradient: "
               << result.preconditioned_grad_f_x_norm << std::endl;

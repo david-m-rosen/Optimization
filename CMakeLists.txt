@@ -46,6 +46,7 @@ set(OPTIMIZATION_HDRS
     ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/Concepts.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/GradientDescent.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/TNT.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/TNLS.h
     )
 message(STATUS "Found ${PROJECT_NAME} header files:\n ${OPTIMIZATION_HDRS}")
 

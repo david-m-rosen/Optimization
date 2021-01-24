@@ -13,6 +13,8 @@
 
 #include "Optimization/Base/Concepts.h"
 
+#include <utility>
+
 namespace Optimization {
 
 namespace Riemannian {
@@ -64,8 +66,38 @@ using QuadraticModel =
                        LinearOperator<Variable, Tangent, Args...> &Hessian,
                        Args &... args)>;
 
-/** An alias template for a Riemannian metric; this assigns to each tangent
- * space T_X an inner product g : T_X x T_X -> R. */
+/** An alias template for a smooth mapping F: X -> Y between Riemannian
+ * manifolds */
+template <typename VariableX, typename VariableY, typename... Args>
+using Mapping = std::function<VariableY(const VariableX &X, Args &... args)>;
+
+/** An alias template for the Jacobian gradF: T_x(X) -> T_{F(x)}(Y) of a smooth
+ * mapping F: X -> Y between smooth Riemannian manifolds */
+template <typename VariableX, typename TangentX, typename TangentY,
+          typename... Args>
+using Jacobian = std::function<TangentY(const VariableX &X, const TangentX &V,
+                                        Args &... args)>;
+
+/** An alias template for the adjoint operator gradFt : T_{F(x)}(Y) -> T_x(X) of
+ * the Jacobian gradF of a smooth mapping F: X -> Y between Riemannian manifolds
+ */
+template <typename VariableX, typename TangentX, typename TangentY,
+          typename... Args>
+using JacobianAdjoint = std::function<TangentX(
+    const VariableX &X, const TangentY &W, Args &... args)>;
+
+/** An alias template for a function that accepts as input a point X, and
+ * returns a *pair* (gradF, gradFt) comprised of the Jacobian gradF of a smooth
+ * mapping F: X -> Y, and its adjoint gradFt */
+template <typename VariableX, typename TangentX, typename TangentY,
+          typename... Args>
+using JacobianPairFunction = std::function<
+    std::pair<Jacobian<VariableX, TangentX, TangentY, Args...>,
+              JacobianAdjoint<VariableX, TangentX, TangentY, Args...>>(
+        const VariableX &X, Args &... args)>;
+
+/** An alias template for a Riemannian metric; this assigns to each
+ * tangent space T_X an inner product g : T_X x T_X -> R. */
 template <typename Variable, typename Tangent, typename Scalar = double,
           typename... Args>
 using RiemannianMetric = std::function<Scalar(
@@ -104,7 +136,7 @@ template <typename Variable, typename Scalar = double>
 struct SmoothOptimizerResult : public OptimizerResult<Variable, Scalar> {
 
   // The norm of the gradient at the returned estimate
-  Scalar grad_f_x_norm;
+  Scalar gradfx_norm;
 
   // The norm of the gradient at the *start* of each iteration
   std::vector<Scalar> gradient_norms;

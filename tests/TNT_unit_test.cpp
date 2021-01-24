@@ -25,7 +25,7 @@ constexpr size_t large_dim = 1000;
 
 ///// Test fixture for testing the Steihaug-Toint preconditioned conjugate
 ///// gradient solver used to (approximately) solve the trust-region subproblem
-///at
+/// at
 ///// each iteration of the truncated-Newton trust-region optimization method
 // class STPCGUnitTest : public testing::Test {
 // protected:
@@ -397,7 +397,7 @@ TEST(TNTUnitTest, EuclideanTNTRosenbrock) {
   EXPECT_NEAR(result.f, 0, TNT_test_error_threshold);
 
   // Check gradient value
-  EXPECT_NEAR(result.grad_f_x_norm, 0, TNT_test_error_threshold);
+  EXPECT_NEAR(result.gradfx_norm, 0, TNT_test_error_threshold);
 
   // Check final solution
   EXPECT_NEAR((result.x - x_min).norm(), 0, TNT_test_error_threshold);
@@ -484,6 +484,6 @@ TEST(TNTUnitTest, RiemannianTNTSphere) {
           tnt_params);
 
   EXPECT_NEAR(result.f, 0, TNT_test_error_threshold);
-  EXPECT_NEAR(result.grad_f_x_norm, 0, TNT_test_error_threshold);
+  EXPECT_NEAR(result.gradfx_norm, 0, TNT_test_error_threshold);
   EXPECT_NEAR((result.x - P).norm(), 0, TNT_test_error_threshold);
 }

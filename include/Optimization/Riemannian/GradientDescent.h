@@ -350,7 +350,7 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
   // Record output
   result.x = x;
   result.f = f_x;
-  result.grad_f_x_norm = grad_f_x_norm;
+  result.gradfx_norm = grad_f_x_norm;
 
   if (params.verbose) {
     std::cout << std::endl

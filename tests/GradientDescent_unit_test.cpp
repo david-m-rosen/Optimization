@@ -67,7 +67,7 @@ TEST(GradientDescentUnitTest, EuclideanGradientDescentRosenbrock) {
   EXPECT_NEAR(result.f, 0, GD_test_error_threshold);
 
   // Check gradient value
-  EXPECT_NEAR(result.grad_f_x_norm, 0, GD_test_error_threshold);
+  EXPECT_NEAR(result.gradfx_norm, 0, GD_test_error_threshold);
 
   // Check final solution
   EXPECT_NEAR((result.x - x_min).norm(), 0, GD_test_error_threshold);
@@ -141,7 +141,7 @@ TEST(GradientDescentUnitTest, RiemannianGradientDescentSphere) {
   EXPECT_NEAR(result.f, 0, GD_test_error_threshold);
 
   // Check gradient value
-  EXPECT_NEAR(result.grad_f_x_norm, 0, GD_test_error_threshold);
+  EXPECT_NEAR(result.gradfx_norm, 0, GD_test_error_threshold);
 
   // Check final solution
   EXPECT_NEAR((result.x - P).norm(), 0, GD_test_error_threshold);
