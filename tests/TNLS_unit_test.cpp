@@ -149,7 +149,7 @@ TEST_F(TNLSUnitTest, LeastSquaresParameterFitting) {
   // Sample a random noise vector
   Vector z = .1 * Vector::Random(m);
 
-  // Add this the outputs y
+  // Add this to the outputs y
   y += z;
 
   Optimization::Riemannian::TNLSParams<Scalar> params;
@@ -174,7 +174,7 @@ TEST_F(TNLSUnitTest, LeastSquaresParameterFitting) {
   Optimization::Riemannian::JacobianAdjoint<Vector, Vector, Vector> gradFt;
   std::tie(gradF, gradFt) = JacFunc(beta);
 
-  Vector gradLbeta = 2 * gradFt(beta, Fbeta);
+  Vector gradLbeta = gradFt(beta, Fbeta) / Fbeta.norm();
 
   /// Verify that the method reported success, and terminated on a solution
   /// of sufficient small residual norm

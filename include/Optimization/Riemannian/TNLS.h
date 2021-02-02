@@ -2,17 +2,17 @@
  * a Riemannian truncated-Newton trust-region algorithm for solving large-scale
  * nonlinear least-squares problems of the form:
  *
- * min_x | F(x) |^2
+ * min_x L(x)
  *
- * where F: X -> Y is a vector-valued mapping from a smooth Riemannian manifold
- * X into a Euclidean space Y.  While it is possible to solve such problems
- * using generic Riemannian optimization algorithms (e.g. the Riemannian
- * truncated-Newton trust-region method implemented in TNT.h), TNLS can take
- * advantage of the specific form of the nonlinear least-squares problem by
- * employing specialized linear-algebraic methods to solve the sequence of
- * model trust-region subproblems:
+ * where L(x) := | F(x) | and F: X -> Y is a vector-valued mapping from a
+ * smooth Riemannian manifold X into a Euclidean space Y.  While it is possible
+ * to solve such problems using generic Riemannian optimization algorithms (e.g.
+ * the Riemannian truncated-Newton trust-region method implemented in TNT.h),
+ * TNLS can take advantage of the specific form of the nonlinear least-squares
+ * problem by employing specialized linear-algebraic methods to solve the
+ * sequence of model trust-region subproblems:
  *
- * min_h | gradF h + F(xk)|^2
+ * min_h | gra h + F(xk)|
  *
  * s.t.  |x| <= Delta
  *
@@ -48,19 +48,40 @@ namespace Optimization {
 
 namespace Riemannian {
 
+/** An alias template for a preconditioning operator for the truncated-Newton
+ * least-squares algorithm.  This function must accept as input the current
+ * iterate X, and return a 3-element tuple (M, MT, Minv) : T_X(M) -> T_X(M)
+ * of linear operators on the tangent space T_X(M) of the manifold M at X.
+ * Specifically:
+ *
+ * - M is an invertible right-preconditioner for the Jacobian dF of F at X;
+ *   that is, the product dF * M should have a more favorable spectrum than dF.
+ * - MT is the transpose of M
+ * - Minv is the inverse of M
+ */
+template <typename VariableX, typename TangentX, typename Scalar = double,
+          typename... Args>
+using TNLSPreconditioner =
+    std::function<std::tuple<LinearOperator<VariableX, TangentX, Args...>,
+                             LinearOperator<VariableX, TangentX, Args...>,
+                             LinearOperator<VariableX, TangentX, Args...>>(
+        const VariableX &X, Args &... args)>;
+
 /** An alias template for a user-definable function that can be
  * used to access various interesting bits of information about the internal
  * state of the algorithm as it runs.  Here:
  *
  * - i: index of current iteration
- * - t: total elapsed computation time at the *start* of the current iteration
+ * - t: total elapsed computation time at the *start* of the current
+ *   iteration
  * - x: iterate at the *start* of the current iteration
  * - f: objective value at x
  * - g: Riemannian gradient at x
  * - HessOp:  Hessian operator at x
  * - Delta: trust-region radius at the *start* of the current iteration
- * - num_STPCG_iters: number of iterations of the Steihaug-Toint preconditioned
- *   conjugate-gradient method performed when computing the trust-update step h
+ * - num_STPCG_iters: number of iterations of the Steihaug-Toint
+ * preconditioned conjugate-gradient method performed when computing the
+ * trust-update step h
  * - h:  the trust-region update step computed during this iteration
  * - df: decrease in objective value obtained by applying the trust-region
  *   update
@@ -68,13 +89,14 @@ namespace Riemannian {
  * - accepted:  Boolean value indicating whether the proposed trust-region
  *   update step h was accepted
  *
- * This function is called at the end of each outer (major) iteration, after all
- * of the above-referenced quantities have been computed, but *before* the
- * update step h computed during this iteration is applied.
+ * This function is called at the end of each outer (major) iteration, after
+ * all of the above-referenced quantities have been computed, but *before*
+ * the update step h computed during this iteration is applied.
  *
- * This function may also return the Boolean value 'true' in order to terminate
- * the truncated-Newton trust-region algorithm; this provides a convenient means
- * of implementing a custom (user-definable) stopping criterion.
+ * This function may also return the Boolean value 'true' in order to
+ * terminate the truncated-Newton trust-region algorithm; this provides a
+ * convenient means of implementing a custom (user-definable) stopping
+ * criterion.
  *
  */
 // template <typename Variable, typename Tangent, typename Scalar = double,
@@ -83,8 +105,9 @@ namespace Riemannian {
 //    std::function<bool(size_t i, double t, const Variable &x, Scalar f,
 //                       const Tangent &g,
 //                       const LinearOperator<Variable, Tangent, Args...>
-//                       &HessOp, Scalar Delta, size_t num_STPCG_iters, const
-//                       Tangent &h, Scalar df, Scalar rho, bool accepted, Args
+//                       &HessOp, Scalar Delta, size_t num_STPCG_iters,
+//                       const Tangent &h, Scalar df, Scalar rho, bool
+//                       accepted, Args
 //                       &... args)>;
 
 /** A lightweight struct containing a few additional algorithm-specific
@@ -213,11 +236,12 @@ struct TNLSResult : public SmoothOptimizerResult<Variable, Scalar> {
  * algorithm for solving large-scale nonlinear least-squares problems of the
  * form:
  *
- * min_x | F(x) |^2
+ * min_x L(x)
  *
- * where F: X -> Y is a vector-valued mapping from a smooth Riemannian manifold
- * X into a Euclidean space Y, using LSQR as the iterative linear-algebraic
- * method for (approximately) solving the model trust-region subproblems:
+ * where L(x) := |F(x)| and F: X -> Y is a vector-valued mapping from a smooth
+ * Riemannian manifold X into a Euclidean space Y, using LSQR as the iterative
+ * linear-algebraic method for (approximately) solving the model trust-region
+ * subproblems:
  *
  * min_h |gradF(x) * h + F(x)]^2
  *
@@ -239,10 +263,10 @@ struct TNLSResult : public SmoothOptimizerResult<Variable, Scalar> {
  * - inner_product_Y is the inner product on the (Euclidean) space Y
  *
  * - retract_X is a retraction operator for X: this is a function taking as
- * input a point X in M and a tangent vector V in the tangent space T_X(M) of M
- * at X, and returns a new point Y in M that is (intuitively) gotten by 'moving
- *   along V from X' (cf. Sec. 4.1 of "Optimization Methods on Riemannian
- *   Manifolds" for a precise definition).
+ *   input a point X in M and a tangent vector V in the tangent space T_X(M) of
+ *   M at X, and returns a new point Y in M that is (intuitively) gotten by
+ *   'moving along V from X' (cf. Sec. 4.1 of "Optimization Methods on
+ *   Riemannian Manifolds" for a precise definition).
  *
  * - x0 (in X) is the initialization point for the Riemannian truncated-Newton
  *   trust-region algorithm.
@@ -338,9 +362,10 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
 
   // Output struct
   TNLSResult<VariableX, Scalar> result;
-  result.status =
-      TNLSStatus::IterationLimit; // "Default" stopping condition (i.e. will
-                                  // trigger if no other is)
+
+  // "Default" stopping condition (i.e. will
+  // trigger if no other is)
+  result.status = TNLSStatus::IterationLimit;
 
   // Current iterate and proposed next iterates;
   VariableX x, x_proposed;
@@ -351,7 +376,7 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
 
   // Squared norm of the (vector-valued) function F at the current and proposed
   // iterates
-  Scalar Fx_norm, Fx_squared_norm, Fx_proposed_squared_norm;
+  Scalar Fx_norm, Fx_squared_norm, Fx_proposed_norm, Fx_proposed_squared_norm;
 
   // Trust-region radius
   Scalar Delta;
@@ -362,8 +387,8 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
   // Relative decrease between subsequent accepted function iterations
   Scalar relative_decrease;
 
-  // Gradient of the squared-error loss L(x) = |F(X)|^2 at the current
-  // iterate x: gradL(x) := 2 * gradF'(x) * F(x)
+  // Gradient of the squared-error loss L(x) = |F(X)| at the current
+  // iterate x: gradL(x) := gradF(x)' * F(x) / |F(X)|
   TangentX gradLx;
 
   // Norm of gradfx
@@ -395,7 +420,7 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
   std::tie(gradFx, gradFxT) = J(x, args...);
 
   // and gradient
-  gradLx = 2 * gradFxT(x, Fx);
+  gradLx = gradFxT(x, Fx) / Fx_norm;
   gradLx_norm = sqrt(metric_X(x, gradLx, gradLx, args...));
 
   /// Set up function handles for inner LSQR linear system solver
@@ -447,7 +472,7 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
 
     // Record output
     result.time.push_back(elapsed_time);
-    result.objective_values.push_back(Fx_squared_norm);
+    result.objective_values.push_back(Fx_norm);
     result.gradient_norms.push_back(gradLx_norm);
     result.trust_region_radius.push_back(Delta);
 
@@ -457,9 +482,9 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
     if (params.verbose) {
       std::cout << "Iter: ";
       std::cout.width(iter_field_width);
-      std::cout << iteration << ", time: " << elapsed_time << ", |F(x)|^2: ";
+      std::cout << iteration << ", time: " << elapsed_time << ", |F(x)|: ";
       std::cout.width(params.precision + 7);
-      std::cout << Fx_squared_norm << ", |grad|: " << gradLx_norm;
+      std::cout << Fx_norm << ", |grad|: " << gradLx_norm;
     }
 
     // Test absolute residual-based stopping criterion
@@ -507,6 +532,7 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
     Fx_proposed = F(x_proposed, args...);
     Fx_proposed_squared_norm =
         inner_product_Y(Fx_proposed, Fx_proposed, args...);
+    Fx_proposed_norm = sqrt(Fx_proposed_squared_norm);
 
     // Compute predicted model decrease
 
@@ -517,21 +543,24 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
     Scalar r2 = inner_product_Y(r, r, args...);
 
     // Decreased in linearized quadratic model after applying update h
-    Scalar dm = Fx_squared_norm - r2;
+    Scalar dq = Fx_squared_norm - r2;
 
-    // Actual function decrease
-    Scalar df = Fx_squared_norm - Fx_proposed_squared_norm;
+    // Actual decrease in residual norm
+    Scalar dL = Fx_norm - Fx_proposed_norm;
+
+    // Actual decrease in *squared* objective value
+    Scalar df2 = Fx_squared_norm - Fx_proposed_squared_norm;
 
     // Relative function decrease
-    relative_decrease = df / (sqrt_eps + Fx_squared_norm);
+    relative_decrease = df2 / (sqrt_eps + Fx_squared_norm);
 
     // Evaluate gain ratio
-    Scalar rho = df / dm;
+    Scalar rho = df2 / dq;
 
     if (params.verbose) {
-      std::cout << ", df: ";
+      std::cout << ", dL: ";
       std::cout.width(params.precision + 7);
-      std::cout << df << ", rho: ";
+      std::cout << dL << ", rho: ";
       std::cout.width(params.precision + 7);
       std::cout << rho << ". ";
     }
@@ -553,7 +582,7 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
       x = std::move(x_proposed);
       Fx = std::move(Fx_proposed);
       Fx_squared_norm = Fx_proposed_squared_norm;
-      Fx_norm = sqrt(Fx_squared_norm);
+      Fx_norm = Fx_proposed_norm;
 
       // Test relative decrease-based stopping criterion
       if (relative_decrease < params.relative_decrease_tolerance) {
@@ -570,7 +599,7 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
       // ... and recompute the Jacobian and its adjoint at the updated iterate
       std::tie(gradFx, gradFxT) = J(x, args...);
 
-      gradLx = 2 * gradFxT(x, Fx, args...);
+      gradLx = gradFxT(x, Fx, args...) / Fx_norm;
       gradLx_norm = sqrt(metric_X(x, gradLx, gradLx, args...));
 
     } // if (step_accepted)
@@ -598,7 +627,7 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
 
   // Record output
   result.x = x;
-  result.f = Fx_squared_norm;
+  result.f = Fx_norm;
   result.gradfx_norm = gradLx_norm;
 
   if (params.verbose) {
