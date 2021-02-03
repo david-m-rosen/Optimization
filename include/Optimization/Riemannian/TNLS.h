@@ -48,24 +48,19 @@ namespace Optimization {
 
 namespace Riemannian {
 
-/** An alias template for a preconditioning operator for the truncated-Newton
- * least-squares algorithm.  This function must accept as input the current
- * iterate X, and return a 3-element tuple (M, MT, Minv) : T_X(M) -> T_X(M)
- * of linear operators on the tangent space T_X(M) of the manifold M at X.
+/** An alias template for a pair (M, MT, Minv) : T_x(M) -> T_x(M)
+ * of linear operators on the tangent space T_x(M) of the manifold M at x.
  * Specifically:
  *
- * - M is an invertible right-preconditioner for the Jacobian dF of F at X;
- *   that is, the product dF * M should have a more favorable spectrum than dF.
- * - MT is the transpose of M
- * - Minv is the inverse of M
+ * - M(x) is an invertible right-preconditioner for the Jacobian gradFx of F at
+ *   x; that is, the product gradFx * M(x) should have a more favorable spectrum
+ *   than gradFx alone
+ * - MT(x) is the transpose of M(x)
  */
-template <typename VariableX, typename TangentX, typename Scalar = double,
-          typename... Args>
+template <typename VariableX, typename TangentX, typename... Args>
 using TNLSPreconditioner =
-    std::function<std::tuple<LinearOperator<VariableX, TangentX, Args...>,
-                             LinearOperator<VariableX, TangentX, Args...>,
-                             LinearOperator<VariableX, TangentX, Args...>>(
-        const VariableX &X, Args &... args)>;
+    std::pair<LinearOperator<VariableX, TangentX, Args...>,
+              LinearOperator<VariableX, TangentX, Args...>>;
 
 /** An alias template for a user-definable function that can be
  * used to access various interesting bits of information about the internal
@@ -80,8 +75,8 @@ using TNLSPreconditioner =
  * - HessOp:  Hessian operator at x
  * - Delta: trust-region radius at the *start* of the current iteration
  * - num_STPCG_iters: number of iterations of the Steihaug-Toint
- * preconditioned conjugate-gradient method performed when computing the
- * trust-update step h
+ *   preconditioned conjugate-gradient method performed when computing the
+ *   trust-update step h
  * - h:  the trust-region update step computed during this iteration
  * - df: decrease in objective value obtained by applying the trust-region
  *   update
@@ -281,6 +276,9 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
          &inner_product_Y,
      const Retraction<VariableX, TangentX, Args...> &retract_X,
      const VariableX &x0, Args &... args,
+     const std::experimental::optional<
+         TNLSPreconditioner<VariableX, TangentX, Args...>> &precon =
+         std::experimental::nullopt,
      const TNLSParams<Scalar> &params = TNLSParams<Scalar>()) {
 
   /// Argument checking
@@ -360,6 +358,9 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
   // Square root of machine precision for type Scalar
   Scalar sqrt_eps = sqrt(std::numeric_limits<Scalar>::epsilon());
 
+  // Preconditioners (if any were supplied)
+  LinearOperator<VariableX, TangentX, Args...> M, MT, Minv;
+
   // Output struct
   TNLSResult<VariableX, Scalar> result;
 
@@ -381,8 +382,11 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
   // Trust-region radius
   Scalar Delta;
 
+  // Newton step computed at x
+  TangentX h;
+
   // Update step norm in the Euclidean and M-norms
-  Scalar h_norm;
+  Scalar h_norm, h_M_norm;
 
   // Relative decrease between subsequent accepted function iterations
   Scalar relative_decrease;
@@ -426,16 +430,32 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
   /// Set up function handles for inner LSQR linear system solver
 
   // Linear operator A (Jacobian gradF)
-  Optimization::LinearAlgebra::LinearOperator<TangentX, VectorY, Args...> A =
-      [&x, &gradFx](const TangentX &v, Args &... args) -> VectorY {
-    return gradFx(x, v, args...);
-  };
+  Optimization::LinearAlgebra::LinearOperator<TangentX, VectorY, Args...> A;
 
-  // Linear operator At (Jacobian gradFt)
-  Optimization::LinearAlgebra::LinearOperator<VectorY, TangentX, Args...> At =
-      [&x, &gradFxT](const VectorY &w, Args &... args) -> TangentX {
-    return gradFxT(x, w, args...);
-  };
+  if (precon) {
+    // We are right-preconditioning by M: A(x) = gradFx * M * v
+    A = [&x, &gradFx, &precon](const TangentX &v, Args &... args) -> VectorY {
+      return gradFx(x, precon->first(x, v, args...), args...);
+    };
+  } else {
+    // No preconditioning: A = gradF * v
+    A = [&x, &gradFx](const TangentX &v, Args &... args) -> VectorY {
+      return gradFx(x, v, args...);
+    };
+  }
+
+  Optimization::LinearAlgebra::LinearOperator<VectorY, TangentX, Args...> At;
+  if (precon) {
+    // We are right-preconditioning by M: At = Mt * gradFx' * w
+    At = [&x, &gradFxT, &precon](const TangentX &w, Args &... args) -> VectorY {
+      return precon->second(x, gradFxT(x, w, args...), args...);
+    };
+  } else {
+    // No preconditioning: At = gradFx' * w
+    At = [&x, &gradFxT](const VectorY &w, Args &... args) -> TangentX {
+      return gradFxT(x, w, args...);
+    };
+  }
 
   // Inner product on T_x(X)
   Optimization::LinearAlgebra::InnerProduct<TangentX, Scalar, Args...>
@@ -507,12 +527,18 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
     Scalar etak = std::min(std::pow(Fx_norm, params.theta), params.kappa_fgr);
 
     size_t inner_iterations;
-    Scalar h_M_norm;
-    TangentX h =
-        Optimization::LinearAlgebra::LSQR<TangentX, VectorY, Scalar, Args...>(
-            A, At, -Fx, inner_product_X, inner_product_Y, args..., h_M_norm,
-            inner_iterations, params.max_LSQR_iterations, params.lambda, etak,
-            params.Atol, params.Acond_limit, Delta);
+
+    h = Optimization::LinearAlgebra::LSQR<TangentX, VectorY, Scalar, Args...>(
+        A, At, -Fx, inner_product_X, inner_product_Y, args..., h_M_norm,
+        inner_iterations, params.max_LSQR_iterations, params.lambda, etak,
+        params.Atol, params.Acond_limit, Delta);
+
+    if (precon) {
+      // If we are using right-preconditioning, then the update returned by LSQR
+      // is expressed in the preconditioned coordinate system defined by M^-1.
+      // Therefore, we must recover h using M
+      h = precon->first(x, h, args...);
+    }
 
     // Compute norm of returned solution
     h_norm = sqrt(metric_X(x, h, h, args...));
@@ -520,7 +546,8 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
     if (params.verbose) {
       std::cout << ", Delta: " << Delta << ", inner iters: ";
       std::cout.width(inner_iter_field_width);
-      std::cout << inner_iterations << ", |h|: " << h_norm;
+      std::cout << inner_iterations << ", |h|: " << h_norm
+                << ", |h|_M: " << h_M_norm;
     }
 
     /// STEP 3:  Update and evaluate trial point
@@ -548,11 +575,11 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
     // Actual decrease in residual norm
     Scalar dL = Fx_norm - Fx_proposed_norm;
 
-    // Actual decrease in *squared* objective value
+    // Actual decrease in *squared* residual norm
     Scalar df2 = Fx_squared_norm - Fx_proposed_squared_norm;
 
     // Relative function decrease
-    relative_decrease = df2 / (sqrt_eps + Fx_squared_norm);
+    relative_decrease = dL / (sqrt_eps + Fx_norm);
 
     // Evaluate gain ratio
     Scalar rho = df2 / dq;
@@ -713,13 +740,16 @@ TNLSResult<Vector, Scalar>
 EuclideanTNLS(const Mapping<Vector, Vector, Args...> &F,
               const JacobianPairFunction<Vector, Vector, Vector> &J,
               const Vector &x0, Args &... args,
+              const std::experimental::optional<
+                  TNLSPreconditioner<Vector, Vector, Args...>> &precon =
+                  std::experimental::nullopt,
               const TNLSParams<Scalar> &params = TNLSParams<Scalar>()) {
 
   /// Run TNLS algorithm using these Euclidean operators
   return TNLS<Vector, Vector, Vector, Scalar, Args...>(
       F, J, EuclideanMetric<Vector, Scalar, Args...>,
       EuclideanInnerProduct<Vector, Scalar, Args...>,
-      EuclideanRetraction<Vector, Args...>, x0, args..., params);
+      EuclideanRetraction<Vector, Args...>, x0, args..., precon, params);
 }
 
 } // namespace Riemannian

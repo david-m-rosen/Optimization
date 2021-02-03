@@ -2,6 +2,8 @@
  * truncated-Newton least-squares method */
 
 #include <Eigen/Dense>
+#include <Eigen/QR>
+
 #include <gtest/gtest.h>
 
 #include "Optimization/Riemannian/TNLS.h"
@@ -42,6 +44,10 @@ protected:
   // Cache variable to store the Jacobian of F
   Matrix J;
 
+  // Cache variable to store the upper-triangular factor R from a QR
+  // factorization of J -- used for preconditioning
+  Matrix R;
+
   // Initialization for nonlinear fitting
   Vector beta0;
 
@@ -53,9 +59,12 @@ protected:
   Optimization::Riemannian::Mapping<Vector, Vector> F;
 
   // Jacobian constructor
-
   Optimization::Riemannian::JacobianPairFunction<Vector, Vector, Vector>
       JacFunc;
+
+  // Preconditioning operators
+  Optimization::Riemannian::LinearOperator<Vector, Vector> M;
+  Optimization::Riemannian::LinearOperator<Vector, Vector> MT;
 
   virtual void SetUp() override {
 
@@ -95,6 +104,10 @@ protected:
       // Set column of J corresponding to w (= beta(0))
       this->J.col(0) = this->J.col(1).cwiseProduct(this->x);
 
+      /// Compute QR factorization of J, and store its upper-triangular factor R
+      Eigen::ColPivHouseholderQR<Matrix> Jfact(J);
+      R = Jfact.matrixR().topRows(2).triangularView<Eigen::Upper>();
+
       /// Construct Jacobian operators
 
       // Jacobian operator
@@ -111,6 +124,20 @@ protected:
 
       /// Pass these back as a pair
       return std::make_pair(gradF, gradFt);
+    };
+
+    /// Construct preconditioning operator
+
+    // Right preconditioner M
+    M = [this](const Vector &x, const Vector &v) -> Vector {
+      // Return R^{-1} * v
+      return this->R.triangularView<Eigen::Upper>().solve(v);
+    };
+
+    // Transpose operator MT
+    MT = [this](const Vector &x, const Vector &v) -> Vector {
+      // Return R^{-T} * v
+      return this->R.transpose().triangularView<Eigen::Lower>().solve(v);
     };
 
     // Set initial point beta0
@@ -132,8 +159,11 @@ TEST_F(TNLSUnitTest, RootFinding) {
   params.verbose = verbose;
 
   Optimization::Riemannian::TNLSResult<Vector> result =
-      Optimization::Riemannian::EuclideanTNLS<Vector>(F, JacFunc, beta0,
-                                                      params);
+      Optimization::Riemannian::EuclideanTNLS<Vector>(
+          F, JacFunc, beta0,
+          std::experimental::optional<
+              Optimization::Riemannian::TNLSPreconditioner<Vector, Vector>>(),
+          params);
 
   /// Verify that the method reported success, and terminated on a solution of
   /// sufficient small residual norm
@@ -160,8 +190,68 @@ TEST_F(TNLSUnitTest, LeastSquaresParameterFitting) {
   params.verbose = verbose;
 
   Optimization::Riemannian::TNLSResult<Vector> result =
-      Optimization::Riemannian::EuclideanTNLS<Vector>(F, JacFunc, beta0,
-                                                      params);
+      Optimization::Riemannian::EuclideanTNLS<Vector>(
+          F, JacFunc, beta0,
+          std::experimental::optional<
+              Optimization::Riemannian::TNLSPreconditioner<Vector, Vector>>(),
+          params);
+
+  // Extract solution
+  const Vector &beta = result.x;
+
+  // Evaluate residual at solution
+  Vector Fbeta = F(beta);
+
+  // Evaluate Jacobian at solution
+  Optimization::Riemannian::Jacobian<Vector, Vector, Vector> gradF;
+  Optimization::Riemannian::JacobianAdjoint<Vector, Vector, Vector> gradFt;
+  std::tie(gradF, gradFt) = JacFunc(beta);
+
+  Vector gradLbeta = gradFt(beta, Fbeta) / Fbeta.norm();
+
+  /// Verify that the method reported success, and terminated on a solution
+  /// of sufficient small residual norm
+  EXPECT_EQ(result.status, Optimization::Riemannian::TNLSStatus::Gradient);
+
+  /// Verify that the gradient of the least-squares objective at the returned
+  /// estimate is sufficiently small
+  EXPECT_LT(gradLbeta.norm(), eps_abs);
+
+  /// Verify that the residual at the returned solution is *strictly smaller*
+  /// than the norm of the noise that was added (i.e., the residual at the
+  /// planted signal)
+  EXPECT_LT(Fbeta.norm(), z.norm());
+}
+
+/// Now fit these parameters to *noisy* data using preconditioning
+TEST_F(TNLSUnitTest, LeastSquaresParameterFittingWithPreconditioning) {
+
+  // Sample a random noise vector
+  Vector z = .1 * Vector::Random(m);
+
+  // Add this to the outputs y
+  y += z;
+
+  Optimization::Riemannian::TNLSParams<Scalar> params;
+  params.relative_decrease_tolerance = 0;
+  params.gradient_tolerance = eps_abs;
+  params.stepsize_tolerance = 0;
+  params.Delta_tolerance = 1e-10;
+  params.verbose = verbose;
+
+  /// Construct preconditioning operator
+
+  Optimization::Riemannian::TNLSPreconditioner<Vector, Vector> precon =
+      std::make_pair(M, MT);
+
+  /// Run optimization!
+  Optimization::Riemannian::TNLSResult<Vector> result =
+      Optimization::Riemannian::EuclideanTNLS<Vector>(
+          F, JacFunc, beta0,
+          std::experimental::optional<
+              Optimization::Riemannian::TNLSPreconditioner<Vector, Vector>>(
+              precon),
+          params);
 
   // Extract solution
   const Vector &beta = result.x;
