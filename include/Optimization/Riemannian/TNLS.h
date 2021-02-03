@@ -70,16 +70,14 @@ using TNLSPreconditioner =
  * - t: total elapsed computation time at the *start* of the current
  *   iteration
  * - x: iterate at the *start* of the current iteration
- * - f: objective value at x
- * - g: Riemannian gradient at x
- * - HessOp:  Hessian operator at x
+ * - Fx:  Current value of the vector function F at the current iterate
+ * - gradFx, gradFxT:  The Jacobian operator of F at the current iterate
  * - Delta: trust-region radius at the *start* of the current iteration
- * - num_STPCG_iters: number of iterations of the Steihaug-Toint
- *   preconditioned conjugate-gradient method performed when computing the
- *   trust-update step h
+ * - num_LSQR_iters: number of iterations of LSQR method performed when
+ *   computing the trust-update step h
  * - h:  the trust-region update step computed during this iteration
- * - df: decrease in objective value obtained by applying the trust-region
- *   update
+ * - dL: decrease in objective value L(x) := |F(x)| obtained by applying the
+ *   trust-region update
  * - rho: value of the gain ratio for the proposed update step h
  * - accepted:  Boolean value indicating whether the proposed trust-region
  *   update step h was accepted
@@ -94,16 +92,14 @@ using TNLSPreconditioner =
  * criterion.
  *
  */
-// template <typename Variable, typename Tangent, typename Scalar = double,
-//          typename... Args>
-// using TNLSUserFunction =
-//    std::function<bool(size_t i, double t, const Variable &x, Scalar f,
-//                       const Tangent &g,
-//                       const LinearOperator<Variable, Tangent, Args...>
-//                       &HessOp, Scalar Delta, size_t num_STPCG_iters,
-//                       const Tangent &h, Scalar df, Scalar rho, bool
-//                       accepted, Args
-//                       &... args)>;
+template <typename VariableX, typename TangentX, typename VectorY,
+          typename Scalar = double, typename... Args>
+using TNLSUserFunction = std::function<bool(
+    size_t i, double t, const VariableX &x, VectorY Fx,
+    const Jacobian<VariableX, TangentX, VectorY, Args...> &gradFx,
+    const JacobianAdjoint<VariableX, TangentX, VectorY, Args...> &gradFxT,
+    Scalar Delta, size_t num_LSQR_iters, const TangentX &h, Scalar dL,
+    Scalar rho, bool accepted, Args &... args)>;
 
 /** A lightweight struct containing a few additional algorithm-specific
  * configuration parameters for a truncated-Newton trust-region method
@@ -279,7 +275,10 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
      const std::experimental::optional<
          TNLSPreconditioner<VariableX, TangentX, Args...>> &precon =
          std::experimental::nullopt,
-     const TNLSParams<Scalar> &params = TNLSParams<Scalar>()) {
+     const TNLSParams<Scalar> &params = TNLSParams<Scalar>(),
+     const std::experimental::optional<
+         TNLSUserFunction<VariableX, TangentX, VectorY, Scalar, Args...>>
+         &user_function = std::experimental::nullopt) {
 
   /// Argument checking
 
@@ -603,6 +602,17 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
     result.update_step_norm.push_back(h_norm);
     result.rho.push_back(rho);
 
+    // Call the user-supplied function to provide access to internal algorithm
+    // state, and check for user-requested termination
+    if (user_function) {
+      if ((*user_function)(iteration, elapsed_time, x, Fx, gradFx, gradFxT,
+                           Delta, inner_iterations, h, dL, rho, step_accepted,
+                           args...)) {
+        result.status = TNLSStatus::UserFunction;
+        break;
+      }
+    }
+
     /// Update cached values if the iterate is accepted
     if (step_accepted) {
       // Accept iterate and cache values ...
@@ -743,13 +753,17 @@ EuclideanTNLS(const Mapping<Vector, Vector, Args...> &F,
               const std::experimental::optional<
                   TNLSPreconditioner<Vector, Vector, Args...>> &precon =
                   std::experimental::nullopt,
-              const TNLSParams<Scalar> &params = TNLSParams<Scalar>()) {
+              const TNLSParams<Scalar> &params = TNLSParams<Scalar>(),
+              const std::experimental::optional<
+                  TNLSUserFunction<Vector, Vector, Vector, Scalar, Args...>>
+                  &user_function = std::experimental::nullopt) {
 
   /// Run TNLS algorithm using these Euclidean operators
   return TNLS<Vector, Vector, Vector, Scalar, Args...>(
       F, J, EuclideanMetric<Vector, Scalar, Args...>,
       EuclideanInnerProduct<Vector, Scalar, Args...>,
-      EuclideanRetraction<Vector, Args...>, x0, args..., precon, params);
+      EuclideanRetraction<Vector, Args...>, x0, args..., precon, params,
+      user_function);
 }
 
 } // namespace Riemannian
