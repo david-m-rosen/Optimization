@@ -233,6 +233,11 @@ struct TNTResult : public SmoothOptimizerResult<Variable, Scalar> {
  *   along V from X' (cf. Sec. 4.1 of "Optimization Methods on Riemannian
  *   Manifolds" for a precise definition).
  *
+ * - precon is an optional preconditioning operator for preconditioning the
+ *   conjugate-gradient method used to compute the inexact Newton update; this
+ *   should be chosen so that precon * HessF has a more favorable spectrum than
+ *   HessF alone.
+ *
  * - x0 (in M) is the initialization point for the Riemannian truncated-Newton
  *   trust-region algorithm.
  */
