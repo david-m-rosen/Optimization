@@ -7,17 +7,17 @@
  * implementation is based upon the algorithm described in Section 4.2 of Parikh
  * and Boyd's monograph "Proximal Algorithms".
  *
- * Copyright (C) 2017-2018 by David M. Rosen (dmrosen@mit.edu)
+ * Copyright (C) 2017-2022 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once
 
 #include <algorithm>
 #include <cmath>
-#include <experimental/optional>
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include "Optimization/Convex/Concepts.h"
@@ -147,18 +147,17 @@ struct ProximalGradientResult : OptimizerResult<Variable, Scalar> {
  */
 
 template <typename Variable, typename Scalar = double, typename... Args>
-ProximalGradientResult<Variable, Scalar>
-ProximalGradient(const Objective<Variable, Scalar, Args...> &f,
-                 const GradientOperator<Variable, Args...> &grad_f,
-                 const Objective<Variable, Scalar, Args...> &g,
-                 const ProximalOperator<Variable, Scalar, Args...> &prox_g,
-                 const InnerProduct<Variable, Scalar, Args...> &inner_product,
-                 const Variable &x0, Args &... args,
-                 const ProximalGradientParams<Scalar> &params =
-                     ProximalGradientParams<Scalar>(),
-                 const std::experimental::optional<
-                     ProximalGradientUserFunction<Variable, Scalar, Args...>>
-                     &user_function = std::experimental::nullopt) {
+ProximalGradientResult<Variable, Scalar> ProximalGradient(
+    const Objective<Variable, Scalar, Args...> &f,
+    const GradientOperator<Variable, Args...> &grad_f,
+    const Objective<Variable, Scalar, Args...> &g,
+    const ProximalOperator<Variable, Scalar, Args...> &prox_g,
+    const InnerProduct<Variable, Scalar, Args...> &inner_product,
+    const Variable &x0, Args &... args,
+    const ProximalGradientParams<Scalar> &params =
+        ProximalGradientParams<Scalar>(),
+    const std::optional<ProximalGradientUserFunction<Variable, Scalar, Args...>>
+        &user_function = std::nullopt) {
 
   /// Declare some useful variables
 

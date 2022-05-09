@@ -2,7 +2,7 @@
  * linear-algebra methods commonly used in the implementation of optimization
  * algorithms.
  *
- * Copyright (C) 2017 - 2020 by David M. Rosen (dmrosen@mit.edu)
+ * Copyright (C) 2017 - 2022 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once
@@ -12,9 +12,9 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
-#include <experimental/optional>
 #include <iostream>
 #include <limits>
+#include <optional>
 
 namespace Optimization {
 
@@ -49,15 +49,14 @@ namespace LinearAlgebra {
  */
 template <typename Vector, typename Multiplier, typename Scalar = double,
           typename... Args>
-using STPCGUserFunction =
-    std::function<bool(size_t k, const Vector &g,
-                       const SymmetricLinearOperator<Vector, Args...> &H,
-                       const std::experimental::optional<LinearOperator<
-                           Vector, std::pair<Vector, Multiplier>, Args...>> &P,
-                       const std::experimental::optional<
-                           LinearOperator<Multiplier, Vector, Args...>> &At,
-                       const Vector &sk, const Vector &rk, const Vector &vk,
-                       const Vector &pk, Scalar alpha_k, Args &... args)>;
+using STPCGUserFunction = std::function<bool(
+    size_t k, const Vector &g,
+    const SymmetricLinearOperator<Vector, Args...> &H,
+    const std::optional<
+        LinearOperator<Vector, std::pair<Vector, Multiplier>, Args...>> &P,
+    const std::optional<LinearOperator<Multiplier, Vector, Args...>> &At,
+    const Vector &sk, const Vector &rk, const Vector &vk, const Vector &pk,
+    Scalar alpha_k, Args &... args)>;
 
 /** An alias template for preconditioners used in conjunction with the
  * Steihaug-Toint truncated preconditioned projected conjugate-gradient
@@ -166,21 +165,18 @@ using STPCGPreconditioner =
  */
 template <typename Vector, typename Multiplier, typename Scalar = double,
           typename... Args>
-Vector STPCG(const Vector &g, const SymmetricLinearOperator<Vector, Args...> &H,
-             const InnerProduct<Vector, Scalar, Args...> &inner_product,
-             Args &... args, Scalar &update_step_M_norm, size_t &num_iterations,
-             Scalar Delta, size_t max_iterations = 1000, Scalar kappa_fgr = .1,
-             Scalar theta = .5,
-             const std::experimental::optional<
-                 STPCGPreconditioner<Vector, Multiplier, Args...>> &P =
-                 std::experimental::nullopt,
-             const std::experimental::optional<
-                 LinearOperator<Multiplier, Vector, Args...>> &At =
-                 std::experimental::nullopt,
-             const std::experimental::optional<
-                 STPCGUserFunction<Vector, Multiplier, Scalar, Args...>>
-                 &user_function = std::experimental::nullopt,
-             Scalar epsilon = 1e-8) {
+Vector STPCG(
+    const Vector &g, const SymmetricLinearOperator<Vector, Args...> &H,
+    const InnerProduct<Vector, Scalar, Args...> &inner_product, Args &... args,
+    Scalar &update_step_M_norm, size_t &num_iterations, Scalar Delta,
+    size_t max_iterations = 1000, Scalar kappa_fgr = .1, Scalar theta = .5,
+    const std::optional<STPCGPreconditioner<Vector, Multiplier, Args...>> &P =
+        std::nullopt,
+    const std::optional<LinearOperator<Multiplier, Vector, Args...>> &At =
+        std::nullopt,
+    const std::optional<STPCGUserFunction<Vector, Multiplier, Scalar, Args...>>
+        &user_function = std::nullopt,
+    Scalar epsilon = 1e-8) {
 
   /// Argument checking
 
@@ -564,9 +560,8 @@ LSQR(const LinearOperator<VectorX, VectorY, Args...> &A,
      size_t max_iterations = 1000, Scalar lambda = 0, Scalar btol = 1e-6,
      Scalar Atol = 1e-6, Scalar Abar_cond_limit = 1e8,
      Scalar Delta = sqrt(std::numeric_limits<Scalar>::max()),
-     const std::experimental::optional<
-         LSQRUserFunction<VectorX, VectorY, Scalar, Args...>> &user_function =
-         std::experimental::nullopt) {
+     const std::optional<LSQRUserFunction<VectorX, VectorY, Scalar, Args...>>
+         &user_function = std::nullopt) {
 
   /// Argument checking
 
@@ -870,9 +865,8 @@ LSQR(const LinearOperator<Vector, Vector, Args...> &A,
      Scalar lambda = 0, Scalar btol = 1e-6, Scalar Atol = 1e-6,
      Scalar Abar_cond_limit = 1e8,
      Scalar Delta = sqrt(std::numeric_limits<Scalar>::max()),
-     const std::experimental::optional<
-         LSQRUserFunction<Vector, Vector, Scalar, Args...>> &user_function =
-         std::experimental::nullopt) {
+     const std::optional<LSQRUserFunction<Vector, Vector, Scalar, Args...>>
+         &user_function = std::nullopt) {
 
   return LSQR<Vector, Vector, Scalar, Args...>(
       A, At, b, inner_product, inner_product, args..., xnorm, num_iterations,

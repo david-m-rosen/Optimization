@@ -12,17 +12,17 @@
  * "Optimization Algorithms on Matrix Manifolds" by Absil, Mahoney, and
  *  Sepulchre
  *
- * Copyright (C) 2017 - 2020 by David M. Rosen (dmrosen@mit.edu)
+ * Copyright (C) 2017 - 2022 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once
 
 #include <algorithm>
 #include <cmath>
-#include <experimental/optional>
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <optional>
 
 #include "Optimization/LinearAlgebra/IterativeSolvers.h"
 #include "Optimization/Riemannian/Concepts.h"
@@ -249,13 +249,11 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     const RiemannianMetric<Variable, Tangent, Scalar, Args...> &metric,
     const Retraction<Variable, Tangent, Args...> &retract, const Variable &x0,
     Args &... args,
-    const std::experimental::optional<
-        LinearOperator<Variable, Tangent, Args...>> &precon =
-        std::experimental::nullopt,
+    const std::optional<LinearOperator<Variable, Tangent, Args...>> &precon =
+        std::nullopt,
     const TNTParams<Scalar> &params = TNTParams<Scalar>(),
-    const std::experimental::optional<
-        TNTUserFunction<Variable, Tangent, Scalar, Args...>> &user_function =
-        std::experimental::nullopt) {
+    const std::optional<TNTUserFunction<Variable, Tangent, Scalar, Args...>>
+        &user_function = std::nullopt) {
 
   /// Argument checking
 
@@ -422,13 +420,12 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
                                               MultiplierType());
   };
 
-  std::experimental::optional<Optimization::LinearAlgebra::STPCGPreconditioner<
+  std::optional<Optimization::LinearAlgebra::STPCGPreconditioner<
       Tangent, MultiplierType, Args...>>
-      Pop(precon ? P
-                 : std::experimental::optional<
-                       Optimization::LinearAlgebra::STPCGPreconditioner<
-                           Tangent, MultiplierType, Args...>>(
-                       std::experimental::nullopt));
+      Pop(precon
+              ? P
+              : std::optional<Optimization::LinearAlgebra::STPCGPreconditioner<
+                    Tangent, MultiplierType, Args...>>(std::nullopt));
 
   // Initialize trust-region radius
   Delta = params.Delta0;
@@ -716,13 +713,11 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     const RiemannianMetric<Variable, Tangent, Scalar, Args...> &metric,
     const Retraction<Variable, Tangent, Args...> &retract, const Variable &x0,
     Args &... args,
-    const std::experimental::optional<
-        LinearOperator<Variable, Tangent, Args...>> &precon =
-        std::experimental::nullopt,
+    const std::optional<LinearOperator<Variable, Tangent, Args...>> &precon =
+        std::nullopt,
     const TNTParams<Scalar> &params = TNTParams<Scalar>(),
-    const std::experimental::optional<
-        TNTUserFunction<Variable, Tangent, Scalar, Args...>> &user_function =
-        std::experimental::nullopt) {
+    const std::optional<TNTUserFunction<Variable, Tangent, Scalar, Args...>>
+        &user_function = std::nullopt) {
 
   // Construct a QuadraticModel function from the passed VectorField and
   // HessianConstructor functions
@@ -766,12 +761,11 @@ TNTResult<Vector, Scalar> EuclideanTNT(
     const Objective<Vector, Scalar, Args...> &f,
     const EuclideanQuadraticModel<Vector, Args...> &QM, const Vector &x0,
     Args &... args,
-    const std::experimental::optional<EuclideanLinearOperator<Vector, Args...>>
-        &precon = std::experimental::nullopt,
+    const std::optional<EuclideanLinearOperator<Vector, Args...>> &precon =
+        std::nullopt,
     const TNTParams<Scalar> &params = TNTParams<Scalar>(),
-    const std::experimental::optional<
-        EuclideanTNTUserFunction<Vector, Scalar, Args...>> &user_function =
-        std::experimental::nullopt) {
+    const std::optional<EuclideanTNTUserFunction<Vector, Scalar, Args...>>
+        &user_function = std::nullopt) {
 
   /// Run TNT algorithm using these Euclidean operators
   return TNT<Vector, Vector, Scalar, Args...>(
@@ -790,12 +784,11 @@ TNTResult<Vector, Scalar> EuclideanTNT(
     const EuclideanLinearOperatorConstructor<Vector, Args...>
         &HessianConstructor,
     const Vector &x0, Args &... args,
-    const std::experimental::optional<EuclideanLinearOperator<Vector, Args...>>
-        &precon = std::experimental::nullopt,
+    const std::optional<EuclideanLinearOperator<Vector, Args...>> &precon =
+        std::nullopt,
     const TNTParams<Scalar> &params = TNTParams<Scalar>(),
-    const std::experimental::optional<
-        EuclideanTNTUserFunction<Vector, Scalar, Args...>> &user_function =
-        std::experimental::nullopt) {
+    const std::optional<EuclideanTNTUserFunction<Vector, Scalar, Args...>>
+        &user_function = std::nullopt) {
 
   EuclideanQuadraticModel<Vector, Args...> QM =
       [&nabla_f, &HessianConstructor](

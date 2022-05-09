@@ -137,8 +137,7 @@ TEST_F(TNTUnitTest, RiemannianTNTSphere) {
 
   Optimization::Riemannian::TNTResult<Vector, Scalar> result =
       Optimization::Riemannian::TNT<Vector, Vector, Scalar, Vector>(
-          F, gradF, HessCon, metric, retract, X0, P, std::experimental::nullopt,
-          tnt_params);
+          F, gradF, HessCon, metric, retract, X0, P, std::nullopt, tnt_params);
 
   /// Extract solution
   const Vector &X = result.x;

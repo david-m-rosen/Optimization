@@ -193,7 +193,7 @@ TEST_F(STPCGUnitTest, ExactSTPCGwithPreconditioning) {
   theta = .999;
   Delta = std::numeric_limits<Scalar>::max();
 
-  std::experimental::optional<
+  std::optional<
       Optimization::LinearAlgebra::STPCGPreconditioner<Vector, Vector>>
       precon_op(small_MinvOp);
 
@@ -223,7 +223,7 @@ TEST_F(STPCGUnitTest, ExactSTPCGwithNegativeCurvatureAndPreconditioning) {
   theta = .999;
   Delta = 1000;
 
-  std::experimental::optional<
+  std::optional<
       Optimization::LinearAlgebra::STPCGPreconditioner<Vector, Vector>>
       precon_op(small_MinvOp);
 
@@ -282,7 +282,7 @@ TEST_F(STPCGUnitTest, STPCGwithPreconditioningAndTruncation) {
   theta = .7;
   Delta = 1000;
 
-  std::experimental::optional<
+  std::optional<
       Optimization::LinearAlgebra::STPCGPreconditioner<Vector, Vector>>
       precon_op(large_MinvOp);
 
@@ -388,7 +388,7 @@ TEST_F(STPCGUnitTest, ExactProjectedSTPCG) {
                           z.tail(STPCG_num_constraints));
   };
 
-  std::experimental::optional<
+  std::optional<
       Optimization::LinearAlgebra::STPCGPreconditioner<Vector, Vector>>
       precon_op(McOp);
 
@@ -397,8 +397,7 @@ TEST_F(STPCGUnitTest, ExactProjectedSTPCG) {
   Optimization::LinearAlgebra::LinearOperator<Vector, Vector> At_func =
       [&At](const Vector &x) -> Vector { return At * x; };
 
-  std::experimental::optional<
-      Optimization::LinearAlgebra::LinearOperator<Vector, Vector>>
+  std::optional<Optimization::LinearAlgebra::LinearOperator<Vector, Vector>>
       At_op(At_func);
 
   /// Solve linearly-constrained trust-region subproblem *exactly* (i.e.,
@@ -463,7 +462,7 @@ TEST_F(STPCGUnitTest, TruncatedPreconditionedProjectedSTPCG) {
                           z.tail(STPCG_num_constraints));
   };
 
-  std::experimental::optional<
+  std::optional<
       Optimization::LinearAlgebra::STPCGPreconditioner<Vector, Vector>>
       precon_op(McOp);
 
@@ -472,8 +471,7 @@ TEST_F(STPCGUnitTest, TruncatedPreconditionedProjectedSTPCG) {
   Optimization::LinearAlgebra::LinearOperator<Vector, Vector> At_func =
       [&At](const Vector &x) -> Vector { return At * x; };
 
-  std::experimental::optional<
-      Optimization::LinearAlgebra::LinearOperator<Vector, Vector>>
+  std::optional<Optimization::LinearAlgebra::LinearOperator<Vector, Vector>>
       At_op(At_func);
 
   /// Approximately solve linearly-constrained trust-region subproblem

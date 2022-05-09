@@ -1,7 +1,7 @@
 /** This header file provides a set of concepts that are useful for
  * implementing linear-algebraic algorithms.
  *
- * Copyright (C) 2020 by David M. Rosen (dmrosen@mit.edu)
+ * Copyright (C) 2022 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once

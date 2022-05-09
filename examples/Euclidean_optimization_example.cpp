@@ -98,8 +98,7 @@ int main() {
   tnt_params.verbose = true;
 
   TNTResult<Vector, Scalar> tnt_result = EuclideanTNT<Vector, Scalar>(
-      F, nabla_F, HC, x0,
-      std::experimental::optional<EuclideanLinearOperator<Vector>>(),
+      F, nabla_F, HC, x0, std::optional<EuclideanLinearOperator<Vector>>(),
       tnt_params);
 
   cout << "Final objective value (should be 0): = " << tnt_result.f << endl

@@ -1,15 +1,15 @@
 /** This header file provides a lightweight template function implementing
  * gradient descent on a Riemannian manifold.
  *
- * Copyright (C) 2017 - 2018 by David M. Rosen (dmrosen@mit.edu)
+ * Copyright (C) 2017 - 2022 by David M. Rosen (dmrosen@mit.edu)
  */
 
 #pragma once
 
-#include <experimental/optional>
 #include <iostream>
 #include <limits>
 #include <math.h>
+#include <optional>
 
 #include "Optimization/Riemannian/Concepts.h"
 #include "Optimization/Util/Stopwatch.h"
@@ -132,9 +132,8 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
     Args &... args,
     const GradientDescentParams<Scalar> &params =
         GradientDescentParams<Scalar>(),
-    const std::experimental::optional<
-        GradientDescentUserFunction<Variable, Tangent, Scalar, Args...>>
-        &user_function = std::experimental::nullopt) {
+    const std::optional<GradientDescentUserFunction<
+        Variable, Tangent, Scalar, Args...>> &user_function = std::nullopt) {
 
   /// Argument checking
 
@@ -426,8 +425,8 @@ GradientDescentResult<Vector, Scalar> EuclideanGradientDescent(
     Args &... args,
     const GradientDescentParams<Scalar> &params =
         GradientDescentParams<Scalar>(),
-    const std::experimental::optional<EuclideanGradientDescentUserFunction<
-        Vector, Scalar, Args...>> &user_function = std::experimental::nullopt) {
+    const std::optional<EuclideanGradientDescentUserFunction<
+        Vector, Scalar, Args...>> &user_function = std::nullopt) {
 
   /// Run gradient descent using these Euclidean operators
   return GradientDescent<Vector, Vector, Scalar, Args...>(

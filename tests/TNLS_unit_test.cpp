@@ -161,7 +161,7 @@ TEST_F(TNLSUnitTest, RootFinding) {
   Optimization::Riemannian::TNLSResult<Vector> result =
       Optimization::Riemannian::EuclideanTNLS<Vector>(
           F, JacFunc, beta0,
-          std::experimental::optional<
+          std::optional<
               Optimization::Riemannian::TNLSPreconditioner<Vector, Vector>>(),
           params);
 
@@ -192,7 +192,7 @@ TEST_F(TNLSUnitTest, LeastSquaresParameterFitting) {
   Optimization::Riemannian::TNLSResult<Vector> result =
       Optimization::Riemannian::EuclideanTNLS<Vector>(
           F, JacFunc, beta0,
-          std::experimental::optional<
+          std::optional<
               Optimization::Riemannian::TNLSPreconditioner<Vector, Vector>>(),
           params);
 
@@ -248,7 +248,7 @@ TEST_F(TNLSUnitTest, LeastSquaresParameterFittingWithPreconditioning) {
   Optimization::Riemannian::TNLSResult<Vector> result =
       Optimization::Riemannian::EuclideanTNLS<Vector>(
           F, JacFunc, beta0,
-          std::experimental::optional<
+          std::optional<
               Optimization::Riemannian::TNLSPreconditioner<Vector, Vector>>(
               precon),
           params);

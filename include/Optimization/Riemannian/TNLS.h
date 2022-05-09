@@ -35,10 +35,10 @@
 
 #include <algorithm>
 #include <cmath>
-#include <experimental/optional>
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <optional>
 
 #include "Optimization/LinearAlgebra/IterativeSolvers.h"
 #include "Optimization/Riemannian/Concepts.h"
@@ -272,13 +272,12 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
          &inner_product_Y,
      const Retraction<VariableX, TangentX, Args...> &retract_X,
      const VariableX &x0, Args &... args,
-     const std::experimental::optional<
-         TNLSPreconditioner<VariableX, TangentX, Args...>> &precon =
-         std::experimental::nullopt,
+     const std::optional<TNLSPreconditioner<VariableX, TangentX, Args...>>
+         &precon = std::nullopt,
      const TNLSParams<Scalar> &params = TNLSParams<Scalar>(),
-     const std::experimental::optional<
+     const std::optional<
          TNLSUserFunction<VariableX, TangentX, VectorY, Scalar, Args...>>
-         &user_function = std::experimental::nullopt) {
+         &user_function = std::nullopt) {
 
   /// Argument checking
 
@@ -746,17 +745,16 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
  */
 
 template <typename Vector, typename Scalar = double, typename... Args>
-TNLSResult<Vector, Scalar>
-EuclideanTNLS(const Mapping<Vector, Vector, Args...> &F,
-              const JacobianPairFunction<Vector, Vector, Vector> &J,
-              const Vector &x0, Args &... args,
-              const std::experimental::optional<
-                  TNLSPreconditioner<Vector, Vector, Args...>> &precon =
-                  std::experimental::nullopt,
-              const TNLSParams<Scalar> &params = TNLSParams<Scalar>(),
-              const std::experimental::optional<
-                  TNLSUserFunction<Vector, Vector, Vector, Scalar, Args...>>
-                  &user_function = std::experimental::nullopt) {
+TNLSResult<Vector, Scalar> EuclideanTNLS(
+    const Mapping<Vector, Vector, Args...> &F,
+    const JacobianPairFunction<Vector, Vector, Vector> &J, const Vector &x0,
+    Args &... args,
+    const std::optional<TNLSPreconditioner<Vector, Vector, Args...>> &precon =
+        std::nullopt,
+    const TNLSParams<Scalar> &params = TNLSParams<Scalar>(),
+    const std::optional<
+        TNLSUserFunction<Vector, Vector, Vector, Scalar, Args...>>
+        &user_function = std::nullopt) {
 
   /// Run TNLS algorithm using these Euclidean operators
   return TNLS<Vector, Vector, Vector, Scalar, Args...>(
