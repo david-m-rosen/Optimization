@@ -33,6 +33,7 @@ enable_testing()
 # UNIT TESTS
 set(TEST_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/IterativeSolvers_unit_test.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/LOBPCG_unit_test.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/TNLS_unit_test.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/GradientDescent_unit_test.cpp
@@ -42,6 +43,9 @@ set(TEST_SRCS
 
 add_executable(IterativeSolvers_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/IterativeSolvers_unit_test.cpp)
 target_link_libraries(IterativeSolvers_unit_test Optimization ${UMFPACK_LIBRARIES} gtest_main)
+
+add_executable(LOBPCG_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/LOBPCG_unit_test.cpp)
+target_link_libraries(LOBPCG_unit_test Optimization gtest_main)
 
 add_executable(TNT_unit_test ${CMAKE_CURRENT_SOURCE_DIR}/TNT_unit_test.cpp)
 target_link_libraries(TNT_unit_test Optimization gtest_main)

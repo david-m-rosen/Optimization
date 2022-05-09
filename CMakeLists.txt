@@ -43,6 +43,7 @@ set(OPTIMIZATION_HDRS
     ${OPTIMIZATION_TOPLEVEL_DIR}/Convex/ADMM.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/LinearAlgebra/Concepts.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/LinearAlgebra/IterativeSolvers.h
+    ${OPTIMIZATION_TOPLEVEL_DIR}/LinearAlgebra/LOBPCG.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/Concepts.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/GradientDescent.h
     ${OPTIMIZATION_TOPLEVEL_DIR}/Riemannian/TNT.h
