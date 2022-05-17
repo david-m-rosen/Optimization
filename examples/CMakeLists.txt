@@ -53,6 +53,10 @@ target_link_libraries(proximal_gradient_example Optimization)
 add_executable(ADMM_example ${CMAKE_CURRENT_SOURCE_DIR}/ADMM_example.cpp)
 target_link_libraries(ADMM_example Optimization)
 
+# Build a minimal working example to demonstrate the LOBPCG method
+add_executable(LOBPCG_example ${CMAKE_CURRENT_SOURCE_DIR}/LOBPCG_example.cpp)
+target_link_libraries(LOBPCG_example Optimization)
+
 
 
 

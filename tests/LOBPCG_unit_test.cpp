@@ -16,7 +16,9 @@ typedef Eigen::Matrix<Scalar, Eigen::Dynamic, 1> Vector;
 typedef Eigen::SparseMatrix<Scalar, Eigen::ColMajor> SparseMatrix;
 typedef Eigen::DiagonalMatrix<Scalar, Eigen::Dynamic> DiagonalMatrix;
 typedef Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> Matrix;
-typedef Optimization::LinearAlgebra::SymmetricLinearOperator<Matrix> LinOp;
+typedef Optimization::LinearAlgebra::SymmetricLinearOperator<Matrix>
+    LinearOperator;
+typedef Optimization::LinearAlgebra::LOBPCGUserFunction<Vector, Matrix> StopFun;
 
 using namespace std;
 
@@ -41,7 +43,8 @@ protected:
   /// Test operators
 
   Vector D;
-  LinOp A, B, T;
+  LinearOperator A, B, T;
+  StopFun stop_fun;
 
   virtual void SetUp() {
 
@@ -55,6 +58,15 @@ protected:
     T = [this](const Matrix &X) -> Matrix {
       return this->D.cwiseAbs().asDiagonal() * X;
     };
+
+    /// Set stopping function to be the relative error criterion
+    stop_fun = [this](size_t i, const LinearOperator &A,
+                      const std::optional<LinearOperator> &B,
+                      const std::optional<LinearOperator> &T, size_t nev,
+                      const Vector &Theta, const Matrix &X, const Vector &r) {
+      Vector res_tols = this->tau * Theta.head(nev).cwiseAbs();
+      return ((r.head(nev).array() <= res_tols.array()).count() == nev);
+    };
   }
 };
 
@@ -66,11 +78,10 @@ TEST_F(LOBPCGTest, EigenvalueProblem) {
   size_t num_iters;
   size_t num_converged;
   std::tie(Theta, X) = Optimization::LinearAlgebra::LOBPCG<Vector, Matrix>(
-      A, std::optional<LinOp>(), std::optional<LinOp>(), n, m, nev, n,
-      num_iters, num_converged, tau);
+      A, std::optional<LinearOperator>(), std::optional<LinearOperator>(), n, m,
+      nev, n, num_iters, num_converged, tau);
 
-  /// Verify that the method reported the correct number of converged
-  /// eigenvalues
+  /// Verify that the reported eigenvalues converged to the required tolerance
   EXPECT_EQ(num_converged, nev);
 
   /// Verify that the estimated eigenvalues are correct to high accuracy
@@ -87,8 +98,8 @@ TEST_F(LOBPCGTest, PreconditionedEigenvalueProblem) {
   size_t num_iters;
   size_t num_converged;
   std::tie(Theta, X) = Optimization::LinearAlgebra::LOBPCG<Vector, Matrix>(
-      A, std::optional<LinOp>(), std::optional<LinOp>(T), n, m, nev, n,
-      num_iters, num_converged, tau);
+      A, std::optional<LinearOperator>(), std::optional<LinearOperator>(T), n,
+      m, nev, n, num_iters, num_converged, tau);
 
   /// Verify that the method reported the correct number of converged
   /// eigenvalues

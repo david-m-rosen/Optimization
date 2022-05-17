@@ -38,7 +38,12 @@ namespace LinearAlgebra {
  * various interesting bits of information about the internal state of the
  * LOBPCG algorithm as it runs.  Here:
  * - i: Index of current iteration
+ * - A: Symmetric linear operator for generalized eigenvalue problem
+ * - B: Optional symmetric positive-definite linear operator for generalized
+ *   eigenvalue problem
+ * - T: Optional symmetric positive-definite preconditioning operator
  * - Theta: the current vector of eigenvalue estimates (Ritz values)
+ * - nev:  The number of desired eigenpairs
  * - X: the current set of eigenvector estimates
  * - r: the current vector of residual norms
  *
@@ -51,9 +56,12 @@ namespace LinearAlgebra {
  */
 template <typename Vector, typename Matrix, typename Scalar = double,
           typename... Args>
-using LOBPCGUserFunction =
-    std::function<bool(size_t i, const Vector &Lambda, const Matrix &X,
-                       const Vector &residuals, Args &... args)>;
+using LOBPCGUserFunction = std::function<bool(
+    size_t i, const SymmetricLinearOperator<Matrix, Args...> &A,
+    const std::optional<SymmetricLinearOperator<Matrix, Args...>> &B,
+    const std::optional<SymmetricLinearOperator<Matrix, Args...>> &T,
+    size_t nev, const Vector &Theta, const Matrix &X, const Vector &residuals,
+    Args &... args)>;
 
 /** This function estimates the smallest eigenpairs (lambda, x) of the
  * generalized symmetric eigenvalue problem:
@@ -201,7 +209,8 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
 
     // Call user-supplied function (if one was provided), and test for
     // user-defined stopping criterion
-    if (user_function && (*user_function)(num_iters, Theta, X, r, args...))
+    if (user_function &&
+        (*user_function)(num_iters, A, B, T, nev, Theta, X, r, args...))
       break;
 
     // Test whether the requested number of eigenpairs have converged
