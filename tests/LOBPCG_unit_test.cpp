@@ -3,8 +3,11 @@
 #include <iostream>
 
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 #include <Eigen/QR>
 #include <Eigen/Sparse>
+
+#include <limits>
 
 #include "gtest/gtest.h"
 
@@ -69,6 +72,271 @@ protected:
     };
   }
 };
+
+/// Test the SVQB helper function
+TEST_F(LOBPCGTest, SVQB) {
+
+  size_t m = 5;
+  size_t nu = 3;
+
+  // Construct a random m x m matrix
+  Matrix L = Matrix::Random(m, m);
+
+  // Construct symmetric positive-definite metric matrix M
+  Matrix M = L * L.transpose();
+
+  // Construct test basis matrix U
+  Matrix U = Matrix::Random(m, nu);
+
+  // Calculate M-orthonormalization of U
+  Matrix V = Optimization::LinearAlgebra::SVQB<Vector, Matrix>(M, U);
+
+  /// Check that V is indeed M-orthonormal
+  Matrix R = V.transpose() * M * V - Matrix::Identity(nu, nu);
+  EXPECT_LT(R.norm(), 1e-6);
+
+  /// Check that U and V have the same range (i.e., they determine the same
+  /// subspace).  Note that if S = range(U) = range(V), then range([U, V]) = S
+  /// as well.  Therefore, it suffices to check that that rank of
+  /// B := [U,V] is nu
+
+  Matrix B(m, 2 * nu);
+  B.leftCols(nu) = U;
+  B.rightCols(nu) = V;
+
+  // Compute rank-revealing QR factorization of B
+  Eigen::ColPivHouseholderQR<Matrix> qr(B);
+
+  EXPECT_EQ(qr.rank(), nu);
+}
+
+/// Test the SVQBdrop helper function
+TEST_F(LOBPCGTest, SVQBdrop) {
+
+  size_t m = 5;
+  size_t nu = 3;
+
+  // Construct a random m x m matrix
+  Matrix L = Matrix::Random(m, m);
+
+  // Construct symmetric positive-definite metric matrix M
+  Matrix M = L * L.transpose();
+
+  // Construct test basis matrix U
+  Matrix U = Matrix::Random(m, nu + 1);
+
+  // Make U rank-deficient by setting the final column to be a scalar multiple
+  // of the penultimate
+  U.col(nu) = -1 * U.col(nu - 1);
+
+  // Calculate M-orthonormalization of U
+  Matrix V = Optimization::LinearAlgebra::SVQBdrop<Vector, Matrix>(M, U);
+
+  /// Check that the returned V has nu columns -- that is, that we truncated 1
+  /// column due to U's rank-deficiency
+  EXPECT_EQ(V.cols(), nu);
+
+  /// Check that the returned V is indeed M-orthonormal
+  Matrix R = V.transpose() * M * V - Matrix::Identity(nu, nu);
+  EXPECT_LT(R.norm(), 1e-6);
+
+  /// Check that U and V have the same range (i.e., they determine the same
+  /// subspace).  Note that if S = range(U) = range(V), then range([U, V]) = S
+  /// as well.  Therefore, it suffices to check that that rank of
+  /// B := [U,V] is nu
+
+  Matrix B(m, 2 * nu + 1);
+  B.leftCols(nu + 1) = U;
+  B.rightCols(nu) = V;
+
+  // Compute rank-revealing QR factorization of B
+  Eigen::ColPivHouseholderQR<Matrix> qr(B);
+
+  EXPECT_EQ(qr.rank(), nu);
+}
+
+/// Test the orthoDrop helper function
+TEST_F(LOBPCGTest, orthoDrop) {
+
+  size_t m = 7;
+
+  /// Construct symmetric positive-definite metric matrix M
+  Matrix L = Matrix::Random(m, m);
+  Matrix M = L * L.transpose();
+
+  /// Construct external M-orthonormal basis V
+  size_t nv = 3;
+  Matrix V = Matrix::Random(m, nv);
+  V = Optimization::LinearAlgebra::SVQB<Vector, Matrix>(M,
+                                                        V); // Orthonormalize V
+
+  // Verify that V is indeed M-orthonormal
+  EXPECT_LT((V.transpose() * M * V - Matrix::Identity(nv, nv)).norm(), 1e-6);
+
+  /// Construct (singular) input matrix U
+  size_t nu = 3;
+  Matrix U = Matrix::Random(m, nu + 1);
+
+  // Make U rank-deficient by setting the final column to be a scalar multiple
+  // of the penultimate column
+  U.col(nu) = -1 * U.col(nu - 1);
+
+  // Calculate orthonormalization of U against V
+  Matrix W = Optimization::LinearAlgebra::orthoDrop<Vector, Matrix>(M, U, V);
+
+  /// Check that the concatenated basis B := [V, W] is indeed M-orthonormal
+  Matrix B(m, nv + W.cols());
+  B.leftCols(nv) = V;
+  B.rightCols(W.cols()) = W;
+  EXPECT_LT(
+      (B.transpose() * M * B - Matrix::Identity(nv + W.cols(), nv + W.cols()))
+          .norm(),
+      1e-6);
+
+  /// Verify that range([V, W]) contains range([U, V])
+
+  // If B is M-orthonormal, then in particular it has full rank.  Moreover, if
+  // range([V, W]) contains range([U, V]), then range([B]) = range([B, U])
+  // => #cols B = rank([B]) = rank([B, U])
+
+  Matrix S(m, B.cols() + U.cols());
+  S.leftCols(B.cols()) = B;
+  S.rightCols(U.cols()) = U;
+
+  // Compute rank-revealing QR factorization of B
+  Eigen::ColPivHouseholderQR<Matrix> qr(S);
+
+  EXPECT_EQ(qr.rank(), B.cols());
+}
+
+/// Test the basic Rayleigh-Ritz helper function
+TEST_F(LOBPCGTest, RayleighRitz) {
+
+  // Sample two symmetric matrices of appropriate dimension
+  size_t n = 7;
+
+  /// Construct symmetric positive-definite metric matrix A
+  Matrix AL = Matrix::Random(n, n);
+  Matrix A = AL * AL.transpose();
+
+  // Construct symmetric positive-definite metric matrix B
+  Matrix BL = Matrix::Random(n, n);
+  Matrix B = BL * BL.transpose();
+
+  Vector Theta;
+  Matrix C;
+  std::tie(Theta, C) =
+      Optimization::LinearAlgebra::RayleighRitz<Vector, Matrix>(A, B);
+
+  /// Verify that C'AC = Theta
+
+  Matrix ThetaMat(Theta.asDiagonal());
+  EXPECT_LT((C.transpose() * A * C - ThetaMat).norm(), 1e-8);
+
+  /// Verify that C'BC = In
+  EXPECT_LT((C.transpose() * B * C - Matrix::Identity(n, n)).norm(), 1e-8);
+}
+
+/// Test modified Rayleigh-Ritz method with useOrtho = true
+TEST_F(LOBPCGTest, ModifiedRayleighRitzUseOrthoTrue) {
+
+  // Sample two symmetric matrices of appropriate dimension
+  size_t ns = 9;
+  size_t nx = 4;
+  size_t nc = 2;
+
+  /// Construct symmetric positive-definite metric matrix A
+  Matrix AL = Matrix::Random(ns, ns);
+  Matrix A = AL * AL.transpose();
+
+  // Construct symmetric positive-definite metric matrix B
+  Matrix BL = Matrix::Random(ns, ns);
+  Matrix B = BL * BL.transpose();
+
+  const auto &[Theta, C, useOrtho] =
+      Optimization::LinearAlgebra::ModifiedRayleighRitz<Vector, Matrix>(
+          A, B, nx, nc, true);
+
+  /// Verify that C has the correct dimensions
+  EXPECT_EQ(C.rows(), ns);
+  EXPECT_EQ(C.cols(), 2 * nx - nc);
+
+  /// Verify that C'C = I
+  EXPECT_LT(
+      (C.transpose() * C - Matrix::Identity(2 * nx - nc, 2 * nx - nc)).norm(),
+      1e-6);
+
+  /// Verify that C'AC = Theta
+  EXPECT_LT((C.transpose() * A * C - Theta).norm(), 1e-6);
+
+  /// Verify that useOrtho == true
+  EXPECT_TRUE(useOrtho);
+}
+
+/// Test modified Rayleigh-Ritz method with useOrtho = false and singular B
+/// matrix
+TEST_F(LOBPCGTest, ModifiedRayleighRitzUseOrthoFalseIllConditionedB) {
+
+  // Sample two symmetric matrices of appropriate dimension
+  size_t ns = 9;
+  size_t nx = 4;
+  size_t nc = 2;
+
+  /// Construct symmetric positive-definite metric matrix A
+  Matrix AL = Matrix::Random(ns, ns);
+  Matrix A = AL * AL.transpose();
+
+  // Construct matrix B = Id
+  Matrix BL = Matrix::Random(ns, ns);
+  // Multiply first column by 10^-8 to make this suuuper
+  // ill-conditioned
+  BL.col(0) *= 1e-8;
+
+  Matrix B = BL * BL.transpose();
+
+  const auto &[Theta, C, useOrtho] =
+      Optimization::LinearAlgebra::ModifiedRayleighRitz<Vector, Matrix>(
+          A, B, nx, nc, false);
+
+  /// Verify that useOrtho has been set to true
+  EXPECT_TRUE(useOrtho);
+}
+
+/// Test modified Rayleigh-Ritz method with useOrtho = false
+TEST_F(LOBPCGTest, ModifiedRayleighRitzUseOrthoFalse) {
+
+  // Sample two symmetric matrices of appropriate dimension
+  size_t ns = 9;
+  size_t nx = 4;
+  size_t nc = 2;
+
+  /// Construct symmetric positive-definite metric matrix A
+  Matrix AL = Matrix::Random(ns, ns);
+  Matrix A = AL * AL.transpose();
+
+  // Construct symmetric positive-definite metric matrix B
+  Matrix BL = Matrix::Random(ns, ns);
+  Matrix B = BL * BL.transpose();
+
+  const auto &[Theta, C, useOrtho] =
+      Optimization::LinearAlgebra::ModifiedRayleighRitz<Vector, Matrix>(
+          A, B, nx, nc, false);
+
+  /// Verify that C has the correct dimensions
+  EXPECT_EQ(C.rows(), ns);
+  EXPECT_EQ(C.cols(), 2 * nx - nc);
+
+  /// Verify that C' * B * C = I
+  EXPECT_LT((C.transpose() * B * C - Matrix::Identity(2 * nx - nc, 2 * nx - nc))
+                .norm(),
+            1e-6);
+
+  /// Verify that C'AC = Theta
+  EXPECT_LT((C.transpose() * A * C - Theta).norm(), 1e-6);
+
+  /// Verify that useOrtho == false
+  EXPECT_FALSE(useOrtho);
+}
 
 /// Test LOBPCG with standard eigenvalue problem and no preconditioning
 TEST_F(LOBPCGTest, EigenvalueProblem) {
