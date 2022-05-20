@@ -89,7 +89,7 @@ TEST_F(LOBPCGTest, SVQB) {
   Matrix U = Matrix::Random(m, nu);
 
   // Calculate M-orthonormalization of U
-  Matrix V = Optimization::LinearAlgebra::SVQB<Vector, Matrix>(M, U);
+  Matrix V = Optimization::LinearAlgebra::SVQB<Vector, Matrix>(U, M * U);
 
   /// Check that V is indeed M-orthonormal
   Matrix R = V.transpose() * M * V - Matrix::Identity(nu, nu);
@@ -130,7 +130,7 @@ TEST_F(LOBPCGTest, SVQBdrop) {
   U.col(nu) = -1 * U.col(nu - 1);
 
   // Calculate M-orthonormalization of U
-  Matrix V = Optimization::LinearAlgebra::SVQBdrop<Vector, Matrix>(M, U);
+  Matrix V = Optimization::LinearAlgebra::SVQBdrop<Vector, Matrix>(U, M * U);
 
   /// Check that the returned V has nu columns -- that is, that we truncated 1
   /// column due to U's rank-deficiency
@@ -164,11 +164,15 @@ TEST_F(LOBPCGTest, orthoDrop) {
   Matrix L = Matrix::Random(m, m);
   Matrix M = L * L.transpose();
 
+  Optimization::LinearAlgebra::SymmetricLinearOperator<Matrix> Mop =
+      [&M](const Matrix &X) -> Matrix { return M * X; };
+
   /// Construct external M-orthonormal basis V
   size_t nv = 3;
   Matrix V = Matrix::Random(m, nv);
-  V = Optimization::LinearAlgebra::SVQB<Vector, Matrix>(M,
-                                                        V); // Orthonormalize V
+
+  // Orthonormalize V
+  V = Optimization::LinearAlgebra::SVQB<Vector, Matrix>(V, M * V);
 
   // Verify that V is indeed M-orthonormal
   EXPECT_LT((V.transpose() * M * V - Matrix::Identity(nv, nv)).norm(), 1e-6);
@@ -182,7 +186,10 @@ TEST_F(LOBPCGTest, orthoDrop) {
   U.col(nu) = -1 * U.col(nu - 1);
 
   // Calculate orthonormalization of U against V
-  Matrix W = Optimization::LinearAlgebra::orthoDrop<Vector, Matrix>(M, U, V);
+  Matrix W = Optimization::LinearAlgebra::orthoDrop<Vector, Matrix>(
+      U, V,
+      std::optional<
+          Optimization::LinearAlgebra::SymmetricLinearOperator<Matrix>>(Mop));
 
   /// Check that the concatenated basis B := [V, W] is indeed M-orthonormal
   Matrix B(m, nv + W.cols());
@@ -192,6 +199,61 @@ TEST_F(LOBPCGTest, orthoDrop) {
       (B.transpose() * M * B - Matrix::Identity(nv + W.cols(), nv + W.cols()))
           .norm(),
       1e-6);
+
+  /// Verify that range([V, W]) contains range([U, V])
+
+  // If B is M-orthonormal, then in particular it has full rank.  Moreover, if
+  // range([V, W]) contains range([U, V]), then range([B]) = range([B, U])
+  // => #cols B = rank([B]) = rank([B, U])
+
+  Matrix S(m, B.cols() + U.cols());
+  S.leftCols(B.cols()) = B;
+  S.rightCols(U.cols()) = U;
+
+  // Compute rank-revealing QR factorization of B
+  Eigen::ColPivHouseholderQR<Matrix> qr(S);
+
+  EXPECT_EQ(qr.rank(), B.cols());
+}
+
+/// Test the orthoDrop helper function *without* passing an optional metric
+/// operator M
+TEST_F(LOBPCGTest, orthoDropNoMetric) {
+
+  size_t m = 7;
+
+  /// Construct external orthonormal basis V
+  size_t nv = 3;
+  Matrix V = Matrix::Random(m, nv);
+
+  // Orthonormalize V
+  V = Optimization::LinearAlgebra::SVQB<Vector, Matrix>(V, V);
+
+  // Verify that V is indeed orthonormal
+  EXPECT_LT((V.transpose() * V - Matrix::Identity(nv, nv)).norm(), 1e-6);
+
+  /// Construct (singular) input matrix U
+  size_t nu = 3;
+  Matrix U = Matrix::Random(m, nu + 1);
+
+  // Make U rank-deficient by setting the final column to be a scalar multiple
+  // of the penultimate column
+  U.col(nu) = -1 * U.col(nu - 1);
+
+  // Calculate orthonormalization of U against V
+  Matrix W = Optimization::LinearAlgebra::orthoDrop<Vector, Matrix>(
+      U, V,
+      std::optional<
+          Optimization::LinearAlgebra::SymmetricLinearOperator<Matrix>>(
+          nullopt));
+
+  /// Check that the concatenated basis B := [V, W] is indeed orthonormal
+  Matrix B(m, nv + W.cols());
+  B.leftCols(nv) = V;
+  B.rightCols(W.cols()) = W;
+  EXPECT_LT((B.transpose() * B - Matrix::Identity(nv + W.cols(), nv + W.cols()))
+                .norm(),
+            1e-6);
 
   /// Verify that range([V, W]) contains range([U, V])
 
@@ -223,14 +285,14 @@ TEST_F(LOBPCGTest, RayleighRitz) {
   Matrix BL = Matrix::Random(n, n);
   Matrix B = BL * BL.transpose();
 
-  Matrix Theta;
+  Vector Theta;
   Matrix C;
   std::tie(Theta, C) =
       Optimization::LinearAlgebra::RayleighRitz<Vector, Matrix>(A, B);
 
   /// Verify that C'AC = Theta
 
-  EXPECT_LT((C.transpose() * A * C - Theta).norm(), 1e-8);
+  EXPECT_LT((C.transpose() * A * C - Matrix(Theta.asDiagonal())).norm(), 1e-8);
 
   /// Verify that C'BC = In
   EXPECT_LT((C.transpose() * B * C - Matrix::Identity(n, n)).norm(), 1e-8);
@@ -252,13 +314,30 @@ TEST_F(LOBPCGTest, ModifiedRayleighRitzUseOrthoTrue) {
   Matrix BL = Matrix::Random(ns, ns);
   Matrix B = BL * BL.transpose();
 
-  const auto &[Theta, C, useOrtho] =
+  const auto &[Thetax, Thetap, Cx, Cp, useOrtho] =
       Optimization::LinearAlgebra::ModifiedRayleighRitz<Vector, Matrix>(
           A, B, nx, nc, true);
 
-  /// Verify that C has the correct dimensions
-  EXPECT_EQ(C.rows(), ns);
-  EXPECT_EQ(C.cols(), 2 * nx - nc);
+  /// Verify that the return values have the correct dimensions
+  EXPECT_EQ(Thetax.size(), nx);
+
+  EXPECT_EQ(Thetap.rows(), nx - nc);
+  EXPECT_EQ(Thetap.cols(), nx - nc);
+
+  EXPECT_EQ(Cx.rows(), ns);
+  EXPECT_EQ(Cx.cols(), nx);
+
+  EXPECT_EQ(Cp.rows(), ns);
+  EXPECT_EQ(Cp.cols(), nx - nc);
+
+  // Reconstruct matrices Theta and C
+  Matrix Theta = Matrix::Zero(2 * nx - nc, 2 * nx - nc);
+  Theta.topLeftCorner(nx, nx) = Thetax.asDiagonal();
+  Theta.bottomRightCorner(nx - nc, nx - nc) = Thetap;
+
+  Matrix C(ns, 2 * nx - nc);
+  C.leftCols(nx) = Cx;
+  C.rightCols(nx - nc) = Cp;
 
   /// Verify that C'C = I
   EXPECT_LT(
@@ -293,7 +372,7 @@ TEST_F(LOBPCGTest, ModifiedRayleighRitzUseOrthoFalseIllConditionedB) {
 
   Matrix B = BL * BL.transpose();
 
-  const auto &[Theta, C, useOrtho] =
+  const auto &[Thetax, Thetap, Cx, Cp, useOrtho] =
       Optimization::LinearAlgebra::ModifiedRayleighRitz<Vector, Matrix>(
           A, B, nx, nc, false);
 
@@ -317,9 +396,29 @@ TEST_F(LOBPCGTest, ModifiedRayleighRitzUseOrthoFalse) {
   Matrix BL = Matrix::Random(ns, ns);
   Matrix B = BL * BL.transpose();
 
-  const auto &[Theta, C, useOrtho] =
+  const auto &[Thetax, Thetap, Cx, Cp, useOrtho] =
       Optimization::LinearAlgebra::ModifiedRayleighRitz<Vector, Matrix>(
           A, B, nx, nc, false);
+
+  EXPECT_EQ(Thetax.size(), nx);
+
+  EXPECT_EQ(Thetap.rows(), nx - nc);
+  EXPECT_EQ(Thetap.cols(), nx - nc);
+
+  EXPECT_EQ(Cx.rows(), ns);
+  EXPECT_EQ(Cx.cols(), nx);
+
+  EXPECT_EQ(Cp.rows(), ns);
+  EXPECT_EQ(Cp.cols(), nx - nc);
+
+  // Reconstruct matrices Theta and C
+  Matrix Theta = Matrix::Zero(2 * nx - nc, 2 * nx - nc);
+  Theta.topLeftCorner(nx, nx) = Thetax.asDiagonal();
+  Theta.bottomRightCorner(nx - nc, nx - nc) = Thetap;
+
+  Matrix C(ns, 2 * nx - nc);
+  C.leftCols(nx) = Cx;
+  C.rightCols(nx - nc) = Cp;
 
   /// Verify that C has the correct dimensions
   EXPECT_EQ(C.rows(), ns);
@@ -338,7 +437,6 @@ TEST_F(LOBPCGTest, ModifiedRayleighRitzUseOrthoFalse) {
 }
 
 /**
-
 /// Test LOBPCG with standard eigenvalue problem and no preconditioning
 TEST_F(LOBPCGTest, EigenvalueProblem) {
 

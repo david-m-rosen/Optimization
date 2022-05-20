@@ -40,14 +40,18 @@ namespace LinearAlgebra {
 
 /// The following are helper functions for the main LOBPCG function
 
-/** Given an m x m symmetric positive-definite matrix M and an m x n basis
- * matrix U, this function computes and returns an M-orthonormalized basis
- * matrix V such that range(U) = range(V). */
+/** Given an m x m symmetric positive-definite linear operator M and an m x n
+ * basis matrix U, this function computes and returns an M-orthonormalized basis
+ * matrix V such that range(U) = range(V).
+ *
+ * Note that this function does not access M directly, but instead accepts as
+ * input the product MU, which is assumed to be calculated externally.
+ */
 template <typename Vector, typename Matrix>
-Matrix SVQB(const Matrix &M, const Matrix &U) {
+Matrix SVQB(const Matrix &U, const Matrix &MU) {
 
   // Construct pairwise inner product matrix U'*M*U
-  Matrix UtMU = U.transpose() * M * U;
+  Matrix UtMU = U.transpose() * MU;
 
   // Construct diagonal scaling matrix D to normalize columns of U'MU
   Vector D = UtMU.diagonal().array().cwiseSqrt().cwiseInverse();
@@ -74,7 +78,7 @@ Matrix SVQB(const Matrix &M, const Matrix &U) {
          (Theta.cwiseSqrt().cwiseInverse()).asDiagonal();
 }
 
-/** Given an m x m symmetric positive-definite matrix M and an m x n
+/** Given an m x m symmetric positive-definite linear operator M and an m x n
  * matrix U, this function computes and returns an M-orthonormalized basis
  * matrix V such that range(U) = range(V).  Unlike the basic SVQB method, this
  * function does *NOT* assume that the input matrix U is a basis (that is, U may
@@ -82,12 +86,15 @@ Matrix SVQB(const Matrix &M, const Matrix &U) {
  * this function will return a nonsingular and well-conditioned basis matrix V
  * for the subspace S = range(U) obtained after *truncating* some of U's
  * columns.
+ *
+ * Note that this function does not access M directly, but instead accepts as
+ * input the product MU, which is assumed to be calculated externally.
  */
 template <typename Vector, typename Matrix>
-Matrix SVQBdrop(const Matrix &M, const Matrix &U) {
+Matrix SVQBdrop(const Matrix &U, const Matrix &MU) {
 
   // Construct pairwise inner product matrix U'*M*U
-  Matrix UtMU = U.transpose() * M * U;
+  Matrix UtMU = U.transpose() * MU;
 
   // Construct diagonal scaling matrix D to normalize columns of U'MU
   Vector D = UtMU.diagonal().array().cwiseSqrt().cwiseInverse();
@@ -124,19 +131,28 @@ Matrix SVQBdrop(const Matrix &M, const Matrix &U) {
          eigs.eigenvalues()(J).cwiseSqrt().cwiseInverse().asDiagonal();
 }
 
-/** Given an m x m symmetric positive-definite matrix M, an m x nu matrix U, and
- * an external M-orthonormal basis V, this function calculates and returns an
- * M-orthonormal basis W such that the following conditions are satisfied:
+/** Given an m x m symmetric positive-definite operator M, an m x nu matrix U,
+ * and an external M-orthonormal basis V, this function calculates and returns
+ * an M-orthonormal basis W such that the following conditions are satisfied:
  *
  * - [U, W] is an M-orthonormal basis for the subspace range([U, W])
  * - range([V, W]) contains range([U, V])
  *
- * The basis W is obtained by M-orthonormalizing the input matrix U against the
+ * The basis W is obtained by B-orthonormalizing the input matrix U against the
  * external basis V, and dropping columns from U (if necessary) to obtain a
  * well-conditioned basis.
+ *
+ * Note that the following function accepts the operator M in the form of a
+ * std::optional<SymmetricLinearOperator>; if this optional is not set, it is
+ * interpreted as M = I.
+ *
  */
-template <typename Vector, typename Matrix>
-Matrix orthoDrop(const Matrix &M, const Matrix &U, const Matrix &V) {
+
+template <typename Vector, typename Matrix, typename... Args>
+Matrix
+orthoDrop(const Matrix &U, const Matrix &V,
+          const std::optional<SymmetricLinearOperator<Matrix, Args...>> &M,
+          Args &...args) {
 
   // As per the recommendation in the "Robust Implementation" paper, the drop
   // tolerance tau_ortho should be a small multiple of the machine precision
@@ -147,27 +163,21 @@ Matrix orthoDrop(const Matrix &M, const Matrix &U, const Matrix &V) {
   Matrix W = U;
 
   // Calculate and cache product MV
-  const Matrix MV = M * V;
+  const Matrix MV = M ? (*M)(V) : V;
   double MVnorm = MV.norm(); // Frobenius norm of  MV
 
-  // Cache variable for product MW
-  Matrix MW = M * W;
+  // Cache for product matrix MW
+  Matrix MW;
 
   for (int i = 0; i < 3; ++i) {
 
     // Outer loop: M-orthogonalize W against V
-    W = W - V * (V.transpose() * M * W);
+    W = W - V * (MV.transpose() * W);
 
     for (int j = 0; j < 3; ++j) {
 
-      // Inner loop: M-orthonormalize W
-      if (j == 0)
-        W = SVQB<Vector, Matrix>(M, W);
-      else
-        W = SVQBdrop<Vector, Matrix>(M, W);
-
-      // Update cache variable MW
-      MW = M * W;
+      // Update product MW
+      MW = M ? (*M)(W) : W;
 
       // Test stopping condition: ||W'MU - I|| < ||MW|| * ||W|| * t_ortho
       // Note that in the following expressions we use the FROBENIUS norm,
@@ -177,6 +187,11 @@ Matrix orthoDrop(const Matrix &M, const Matrix &U, const Matrix &V) {
       if ((W.transpose() * MW - Matrix::Identity(W.cols(), W.cols())).norm() <
           MW.norm() * W.norm() * W.size() * tau_ortho)
         break;
+
+      // Inner loop: M-orthonormalize W
+      W = (j == 0 ? SVQB<Vector, Matrix>(W, MW)
+                  : SVQBdrop<Vector, Matrix>(W, MW));
+
     } // inner loop
 
     // Test stopping condition: ||V'MW|| < ||MV||* ||W|| * t_ortho
@@ -194,7 +209,7 @@ Matrix orthoDrop(const Matrix &M, const Matrix &U, const Matrix &V) {
 
 /** This function implements the basic Rayleigh-Ritz procedure: Given two
  * symmetric n x n matrices A and B, with B positive-definite, this function
- * computes and returns an n x n matrix C and a DiagonalMatrix Theta satisfying
+ * computes and returns a pair of n x n matrices [Theta, C] satisfying
  *
  * C'AC = Theta
  * C'BC = I_n
@@ -203,15 +218,14 @@ Matrix orthoDrop(const Matrix &M, const Matrix &U, const Matrix &V) {
  * replaced by S'BS, where S is a basis matrix for the search space.
  */
 template <typename Vector, typename Matrix>
-std::pair<Matrix, Matrix> RayleighRitz(const Matrix &A, const Matrix &B) {
+std::pair<Vector, Matrix> RayleighRitz(const Matrix &A, const Matrix &B) {
   // Compute diagonal scaling matrix to equilibrate B
   Vector D = A.diagonal().cwiseSqrt().cwiseInverse();
 
   Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> eig(
       D.asDiagonal() * A * D.asDiagonal(), D.asDiagonal() * B * D.asDiagonal());
 
-  return std::make_pair(eig.eigenvalues().asDiagonal(),
-                        D.asDiagonal() * eig.eigenvectors());
+  return std::make_pair(eig.eigenvalues(), D.asDiagonal() * eig.eigenvectors());
 }
 
 /** This function implements the modified Rayleigh-Ritz procedure (with improved
@@ -226,13 +240,21 @@ std::pair<Matrix, Matrix> RayleighRitz(const Matrix &A, const Matrix &B) {
  *   converged eigenpairs
  * - useOrtho is a Boolean value indicating whether S'BS = I
  *
- * This function returns a matrix C = [Cx, Cp] of dimension ns x (2*nx - nc)
- * and a matrix Theta of Ritz values satisfying
+ * This function returns a tuple [Thetax, Thetap, Cx, Cp, useOrtho] consisting
+ * of:
+ *
+ * - A vector Thetax consisting of updated Ritz values
+ * - A matrix Thetap consisting of partial inner products
+ * - An ns x nx transformation matrix Cx for updating the eigenvector estimates
+ * - An ns x (nx - nc) transformation matrix Cp for updating the search
+ *
+ * Defining C = [Cx, Cp] and Theta Diag(Thetax, Thetap), the return values for
+ * this function should satisfy the equations:
  *
  * C'(S'AS)C = Theta, C'(S'BS)C = I
  */
 template <typename Vector, typename Matrix>
-std::tuple<Matrix, Matrix, bool>
+std::tuple<Vector, Matrix, Matrix, Matrix, bool>
 ModifiedRayleighRitz(const Matrix &StAS, const Matrix &StBS, size_t nx,
                      size_t nc, bool useOrtho) {
 
@@ -241,14 +263,16 @@ ModifiedRayleighRitz(const Matrix &StAS, const Matrix &StBS, size_t nx,
   // Get dimension of search space
   size_t ns = StAS.rows();
 
+  // Preallocate outputs
+  Vector Thetax(nx);
+  Matrix Thetap = Matrix::Zero(nx - nc, nx - nc);
+
   // Preallocate output matrix C
-  Matrix C(ns, 2 * nx - nc);
+  Matrix Cx(ns, nx);
+  Matrix Cp(ns, nx - nc);
 
   // A vector to cache the original Ritz values
   Vector ritz_vals;
-
-  // Preallocate output matrix Theta of appropriate dimension
-  Matrix Theta = Matrix::Zero(2 * nx - nc, 2 * nx - nc);
 
   // Preallocate orthogonal matrix Q1p^T from LQ factorization
   Matrix Q1pT;
@@ -287,8 +311,8 @@ ModifiedRayleighRitz(const Matrix &StAS, const Matrix &StBS, size_t nx,
     Q1pT = qr.householderQ();
 
     // Set Cx
-    C.leftCols(nx) = Z.leftCols(nx);
-    C.rightCols(nx - nc) = Z.rightCols(ns - nx) * Q1pT.leftCols(nx - nc);
+    Cx = Z.leftCols(nx);
+    Cp = Z.rightCols(ns - nx) * Q1pT.leftCols(nx - nc);
 
   } else {
     // Extract diagonal equilibration vector
@@ -304,7 +328,7 @@ ModifiedRayleighRitz(const Matrix &StAS, const Matrix &StBS, size_t nx,
 
     if (cond > tau_skip) {
       // Set useOrtho_out = true and exit
-      return std::make_tuple(Theta, C, true);
+      return std::make_tuple(Thetax, Thetap, Cx, Cp, true);
     }
 
     // Solve generalized eigenvalue problem
@@ -333,19 +357,19 @@ ModifiedRayleighRitz(const Matrix &StAS, const Matrix &StBS, size_t nx,
     Q1pT = qr.householderQ();
 
     // Set Cx
-    C.leftCols(nx) = D.asDiagonal() * Z.leftCols(nx);
-    C.rightCols(nx - nc) =
-        D.asDiagonal() * Z.rightCols(ns - nx) * Q1pT.leftCols(nx - nc);
+    Cx = D.asDiagonal() * Z.leftCols(nx);
+    Cp = D.asDiagonal() * Z.rightCols(ns - nx) * Q1pT.leftCols(nx - nc);
   }
 
   // Construct and return block diagonal matrix Theta
-  Theta.topLeftCorner(nx, nx) = ritz_vals.head(nx).asDiagonal();
-  Theta.bottomRightCorner(nx - nc, nx - nc) =
-      Q1pT.leftCols(nx - nc).transpose() *
-      ritz_vals.tail(ns - nx).asDiagonal() * Q1pT.leftCols(nx - nc);
+  Thetax = ritz_vals.head(nx);
+  Thetap = Q1pT.leftCols(nx - nc).transpose() *
+           ritz_vals.tail(ns - nx).asDiagonal() * Q1pT.leftCols(nx - nc);
 
-  return std::make_tuple(Theta, C, useOrtho_out);
+  return std::make_tuple(Thetax, Thetap, Cx, Cp, useOrtho_out);
 }
+
+/**
 
 /** An alias template for a user-definable function that can be used to
  * access various interesting bits of information about the internal state
@@ -468,6 +492,19 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
   // Matrix of residuals A*X - B*Theta
   Matrix R;
 
+  // Matrix of preconditioned residuals -- these will be orthonormalized to get
+  // the matrix of search directions W
+  Matrix TR;
+
+  // Matrix of *orthonormalized* preconditioned search directions
+  Matrix W;
+
+  // Matrix of implicit differences X^(i) - X^(i-1)
+  Matrix P;
+
+  // Matrix containing the pair [X, P]
+  Matrix XP;
+
   // Vector of residual norms: ri = ||Ri||, the norm of the ith column of R
   Vector r;
 
@@ -491,23 +528,44 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
   /// INITIALIZATION
 
   AX = A(X);
-  BX = B(X);
+  BX = B ? (*B)(X) : X;
 
-  std::tie()
+  // B-orthonormalize columns of X using standard Rayleigh Ritz procedure
+  std::tie(Theta, C) =
+      RayleighRitz<Matrix, Matrix>(X.transpose() * AX, X.transpose() * BX);
 
-      for (num_iters = 0; num_iters < max_iters; ++num_iters) {
-    // Step 7: Compute residuals W
-    W = AX - BX * Theta.asDiagonal();
+  // In-place update AX and BX
+  AX = AX * C;
+  BX = BX * C;
+
+  // Compute residuals
+  R = AX - BX * Theta;
+
+  // Compute preconditioned residuals (search directions), if a preconditioner
+  // was supplied
+  TR = T ? (*T)(R) : R;
+
+  // Initialize number of converged eigenpairs
+  nc = 0;
+
+  bool useOrtho_prev = false;
+  bool useOrtho = false;
+
+  /// MAIN LOOP
+
+  for (num_iters = 0; num_iters < max_iters; ++num_iters) {
 
     // Calculate residual norms
-    r = W.colwise().norm();
+    r = R.colwise().norm();
 
     /// TEST STOPPING CRITERIA
     // Here we apply the convergence test described in Section 4.3 of the
     // paper "A Robust and Efficient Implementation of LOBPCG"
 
     Vector tolerances =
-        tau * (A2normest + B2normest * Theta.cwiseAbs().transpose().array()) *
+        tau *
+        (A2normest +
+         B2normest * Theta.diagonal().head(nx).cwiseAbs().transpose().array()) *
         X.colwise().norm().array();
 
     // Test how many of the lowest k eigenpairs have converged
@@ -644,6 +702,8 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
 
   return std::make_pair(Theta, X);
 }
+
+* /
 
 /** This function estimates the smallest eigenpairs (lambda, x) of the
  * generalized symmetric eigenvalue problem:
