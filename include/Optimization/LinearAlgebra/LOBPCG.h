@@ -194,8 +194,7 @@ Matrix orthoDrop(const Matrix &M, const Matrix &U, const Matrix &V) {
 
 /** This function implements the basic Rayleigh-Ritz procedure: Given two
  * symmetric n x n matrices A and B, with B positive-definite, this function
- * computes and returns an n x n matrix C and a vector of eigenvalues Theta
- * satisfying
+ * computes and returns an n x n matrix C and a DiagonalMatrix Theta satisfying
  *
  * C'AC = Theta
  * C'BC = I_n
@@ -204,14 +203,15 @@ Matrix orthoDrop(const Matrix &M, const Matrix &U, const Matrix &V) {
  * replaced by S'BS, where S is a basis matrix for the search space.
  */
 template <typename Vector, typename Matrix>
-std::pair<Vector, Matrix> RayleighRitz(const Matrix &A, const Matrix &B) {
+std::pair<Matrix, Matrix> RayleighRitz(const Matrix &A, const Matrix &B) {
   // Compute diagonal scaling matrix to equilibrate B
   Vector D = A.diagonal().cwiseSqrt().cwiseInverse();
 
   Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> eig(
       D.asDiagonal() * A * D.asDiagonal(), D.asDiagonal() * B * D.asDiagonal());
 
-  return std::make_pair(eig.eigenvalues(), D.asDiagonal() * eig.eigenvectors());
+  return std::make_pair(eig.eigenvalues().asDiagonal(),
+                        D.asDiagonal() * eig.eigenvectors());
 }
 
 /** This function implements the modified Rayleigh-Ritz procedure (with improved
@@ -393,19 +393,19 @@ using LOBPCGUserFunction = std::function<bool(
  *   approximates A^-1 in the sense that the condition number kappa(TA) should
  *   be (much) smaller than kappa(A) itself.  The absence of this parameter
  *   indicates that T == I (i.e. that no preconditioning is applied)
- * - X0 is an n x m matrix containing an initial set of linearly-independent
+ * - X0 is an m x nx matrix containing an initial set of linearly-independent
  *   eigenvector estimates.
  * - nev is the number of desired eigenpairs; note that this number should be
- *   less than the block size m.
+ *   less than the block size nx.
  * - max_iters is the maximum number of iterations to perform
  * - num_iters is a return value that gives the number of iterations
  *   executed by the algorithm
- * - num_converged is a return value that indicates the number of eigenpairs
+ * - nc is a return value that indicates the number of eigenpairs
  *   that have converged to the requested precision
  * - tau is the stopping tolerance for the convergence test described in
  *   Section 4.3 of the paper "A Robust and Efficient Implementation of
- * LOBPCG"; specifically, an eigenpair (lambda, x) is considered converged
- * when:
+ *   LOBPCG"; specifically, an eigenpair (lambda, x) is considered converged
+ *   when:
  *
  *   ||Ax - lambda * Bx|| / (||A||_2 + lambda * ||B_2|| * ||x||) <= tau
  *
@@ -413,6 +413,8 @@ using LOBPCGUserFunction = std::function<bool(
  *   inspect various variables of interest as the algorithm runs, and
  *   (optionally) to define a custom stopping criterion for the algorithm.
  */
+
+/**
 template <typename Vector, typename Matrix, typename Scalar = double,
           typename... Args>
 std::pair<Vector, Matrix>
@@ -420,53 +422,59 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
        const std::optional<SymmetricLinearOperator<Matrix, Args...>> &B,
        const std::optional<SymmetricLinearOperator<Matrix, Args...>> &T,
        const Matrix &X0, size_t nev, size_t max_iters, size_t &num_iters,
-       size_t &num_converged, Args &...args, Scalar tau = 1e-6,
+       size_t &nc, Args &...args, Scalar tau = 1e-6,
        const std::optional<LOBPCGUserFunction<Vector, Matrix, Scalar, Args...>>
            &user_function = std::nullopt) {
 
-  size_t n = X0.rows(); // Dimension of problem
-  size_t m = X0.cols(); // Block size
+  size_t m = X0.rows();  // Dimension of problem
+  size_t nx = X0.cols(); // Block size
 
   /// Input sanitation
 
-  if (nev > m)
-    throw std::invalid_argument("Block size m must be greater than or equal to "
-                                "the number nev of desired eigenpairs");
+  if (nev > nx)
+    throw std::invalid_argument(
+        "Block size nx must be greater than or equal to "
+        "the number nev of desired eigenpairs");
 
-  if (m > n)
-    throw std::invalid_argument("Block size m must be less than or equal to "
-                                "the dimension n of the problem");
+  if (nx > m)
+    throw std::invalid_argument("Block size nx must be less than or equal to "
+                                "the dimension m of the problem");
 
   /// Preallocate memory
 
   // Get some useful references to elements of the result struct
   Matrix X = X0; // Matrix of eigenvector estimates
-  Vector Theta;  // Vector of eigenvalue estimates (Ritz values)
-  Vector r;      // Vector of residual norms
 
-  /// Preallocate memory
-  Matrix W(n, m);
-  Matrix P(n, m);
-  Matrix Q(n, m);
-  Matrix AX(n, m);
-  Matrix AW(n, m);
-  Matrix AP(n, m);
-  Matrix BX(n, m);
-  Matrix BW(n, m);
-  Matrix BP(n, m);
-  Matrix R(m, m);
-  Matrix Rinv(m, m);
-  Matrix Im = Matrix::Identity(m, m);
+  // In our implementation of LOBPCG, Theta is a matrix of the form
+  //
+  // Theta = [Thetax,    0  ]
+  //         [  0     Thetap]
+  //
+  // where:
+  //  - Thetax is a diagonal matrix of dimension nx containing estimated Ritz
+  //    pairs
+  //  - Thetap is a block matrix of size (nx - nc) x (nx - nc)
+  Matrix Theta;
 
-  Matrix gramA, gramB;
+  // Change of basis matrix used to B-orthonormalize subspace basis S and
+  // (partially) diagonalize S'AS.  This matrix satisfies:
+  // - C'(S'BS)C = I
+  // - C'(S'AS)C = Theta
+  Matrix C;
 
-  Matrix CX, CW, CP;
+  // Cache variables for various matrix products
+  Matrix AX, BX;
 
-  Matrix V;
+  // Matrix of residuals A*X - B*Theta
+  Matrix R;
+
+  // Vector of residual norms: ri = ||Ri||, the norm of the ith column of R
+  Vector r;
 
   /// Estimate 2-norms of A and B using a random matrix with standard Gaussian
-  /// entries, as described in Section 4.3 of the paper "A Robust and
-  /// Efficient Implementation of LOBPCG"
+  /// entries, as described in Section 4.3 of the paper "A Robust and Efficient
+  /// Implementation of LOBPCG".  These quantities are used in the
+  /// scale-invariant backward-stable termination criterion.
 
   // Sample a Gaussian
   std::default_random_engine gen;
@@ -480,31 +488,14 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
   Scalar A2normest = A(Omega).norm() / Omega.norm();
   Scalar B2normest = B ? (*B)(Omega).norm() / Omega.norm() : 1.0;
 
-  /// START MAIN LOBPCG LOOP
+  /// INITIALIZATION
 
-  // Step 3:  B-orthonormalize X
-  BX = B ? (*B)(X) : X;
-
-  // Calculate upper-triangular factor R of Cholesky decomposition of X'BX =
-  // R'R
-  R = (X.transpose() * BX).llt().matrixU();
-  Rinv = R.template triangularView<Eigen::Upper>().solve(Im);
-  X = X * Rinv;
-  BX = BX * Rinv;
   AX = A(X);
+  BX = B(X);
 
-  // Step 4: Compute initial Ritz vectors
-  // Solve eigenproblem X'AX = V*Lambda*V'
+  std::tie()
 
-  Eigen::SelfAdjointEigenSolver<Matrix> XtAX(X.transpose() * AX);
-  Theta = XtAX.eigenvalues();
-  V = XtAX.eigenvectors();
-
-  X = X * V;
-  AX = AX * V;
-  BX = BX * V;
-
-  for (num_iters = 0; num_iters < max_iters; ++num_iters) {
+      for (num_iters = 0; num_iters < max_iters; ++num_iters) {
     // Step 7: Compute residuals W
     W = AX - BX * Theta.asDiagonal();
 
@@ -690,6 +681,8 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
  *   inspect various variables of interest as the algorithm runs, and
  *   (optionally) to define a custom stopping criterion for the algorithm.
  */
+
+/**
 template <typename Vector, typename Matrix, typename Scalar = double,
           typename... Args>
 std::pair<Vector, Matrix>
@@ -706,5 +699,7 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
                                                  num_iters, num_converged,
                                                  args..., tau, user_function);
 }
+
+*/
 } // namespace LinearAlgebra
 } // namespace Optimization
