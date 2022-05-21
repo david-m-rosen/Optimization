@@ -220,7 +220,7 @@ orthoDrop(const Matrix &U, const Matrix &V,
 template <typename Vector, typename Matrix>
 std::pair<Vector, Matrix> RayleighRitz(const Matrix &A, const Matrix &B) {
   // Compute diagonal scaling matrix to equilibrate B
-  Vector D = A.diagonal().cwiseSqrt().cwiseInverse();
+  Vector D = B.diagonal().cwiseSqrt().cwiseInverse();
 
   Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> eig(
       D.asDiagonal() * A * D.asDiagonal(), D.asDiagonal() * B * D.asDiagonal());
@@ -368,8 +368,6 @@ ModifiedRayleighRitz(const Matrix &StAS, const Matrix &StBS, size_t nx,
 
   return std::make_tuple(Thetax, Thetap, Cx, Cp, useOrtho_out);
 }
-
-/**
 
 /** An alias template for a user-definable function that can be used to
  * access various interesting bits of information about the internal state
