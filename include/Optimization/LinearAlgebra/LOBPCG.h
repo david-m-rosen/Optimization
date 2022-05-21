@@ -438,7 +438,6 @@ using LOBPCGUserFunction = std::function<bool(
  *   (optionally) to define a custom stopping criterion for the algorithm.
  */
 
-/**
 template <typename Vector, typename Matrix, typename Scalar = double,
           typename... Args>
 std::pair<Vector, Matrix>
@@ -452,6 +451,10 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
 
   size_t m = X0.rows();  // Dimension of problem
   size_t nx = X0.cols(); // Block size
+  size_t Pcols = 0;
+
+  // Column dimension of current search space basis matrix S
+  size_t ns;
 
   /// Input sanitation
 
@@ -478,13 +481,14 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
   //  - Thetax is a diagonal matrix of dimension nx containing estimated Ritz
   //    pairs
   //  - Thetap is a block matrix of size (nx - nc) x (nx - nc)
-  Matrix Theta;
+  Vector Thetax;
+  Matrix Thetap;
 
-  // Change of basis matrix used to B-orthonormalize subspace basis S and
-  // (partially) diagonalize S'AS.  This matrix satisfies:
+  // Change of basis matrix C = [Cx, Cp] used to B-orthonormalize subspace basis
+  // S and (partially) diagonalize S'AS.  This matrix satisfies:
   // - C'(S'BS)C = I
   // - C'(S'AS)C = Theta
-  Matrix C;
+  Matrix Cx, Cp;
 
   // Cache variables for various matrix products
   Matrix AX, BX;
@@ -499,11 +503,17 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
   // Matrix of *orthonormalized* preconditioned search directions
   Matrix W;
 
-  // Matrix of implicit differences X^(i) - X^(i-1)
-  Matrix P;
+  // Search space basis matrix S = [X, P, W]
+  Matrix S(m, 3 * nx); // We preallocate the maximum needed size
 
-  // Matrix containing the pair [X, P]
-  Matrix XP;
+  // Cache variables for products AS and BS
+  // NB:  We initialize these to their maximum possible size
+  Matrix AS(m, 3 * nx);
+  Matrix BS(m, 3 * nx);
+
+  // Gram matrices S'AS, B'AS
+  Matrix StAS(3 * nx, 3 * nx);
+  Matrix StBS(3 * nx, 3 * nx);
 
   // Vector of residual norms: ri = ||Ri||, the norm of the ith column of R
   Vector r;
@@ -516,10 +526,10 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
   // Sample a Gaussian
   std::default_random_engine gen;
   std::normal_distribution<Scalar> normal(0, 1.0);
-  Matrix Omega(n, m);
+  Matrix Omega(m, nx);
 
-  for (size_t i = 0; i < n; ++i)
-    for (size_t j = 0; j < m; ++j)
+  for (size_t i = 0; i < m; ++i)
+    for (size_t j = 0; j < nx; ++j)
       Omega(i, j) = normal(gen);
 
   Scalar A2normest = A(Omega).norm() / Omega.norm();
@@ -531,19 +541,18 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
   BX = B ? (*B)(X) : X;
 
   // B-orthonormalize columns of X using standard Rayleigh Ritz procedure
-  std::tie(Theta, C) =
-      RayleighRitz<Matrix, Matrix>(X.transpose() * AX, X.transpose() * BX);
+  std::tie(Thetax, Cx) =
+      RayleighRitz<Vector, Matrix>(X.transpose() * AX, X.transpose() * BX);
 
   // In-place update AX and BX
-  AX = AX * C;
-  BX = BX * C;
+  AX = AX * Cx;
+  BX = BX * Cx;
 
   // Compute residuals
-  R = AX - BX * Theta;
+  R = AX - BX * Thetax.asDiagonal();
 
-  // Compute preconditioned residuals (search directions), if a preconditioner
-  // was supplied
-  TR = T ? (*T)(R) : R;
+  // Initialize S
+  S.leftCols(nx) = X;
 
   // Initialize number of converged eigenpairs
   nc = 0;
@@ -555,155 +564,150 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
 
   for (num_iters = 0; num_iters < max_iters; ++num_iters) {
 
+    /// LOOP INVARIANTS: At the start of each iteration, the following hold:
+    ///
+    /// Pcols is initialized
+    ///
+    /// S = [X, P, *], where X and P are the values to be used in the current
+    /// iteration
+    ///
+    /// X, AX, BX, and Thetax are initialized to their values for the current
+    /// iteration
+    ///
+    /// Residuals R = AX - BX*Thetax are initialized to their values for the
+    /// current iteration
+    ///
+    /// useOrtho = useOrtho_prev
+
+    /// COMPUTE ORTHONORMALIZED BASIS OF PRECONDITIONED SEARCH DIRECTIONS W
+
+    // Compute preconditioned residuals (search directions), if a preconditioner
+    // was supplied
+    TR = T ? (*T)(R) : R;
+
+    // B-orthonormalize the preconditioned search residuals TR against the
+    // partial search space basis X, P
+    W = useOrtho ? orthoDrop<Vector, Matrix, Args...>(
+                       TR, S.leftCols(nx + Pcols), B, args...)
+                 : TR;
+
+    // Set final block of search space basis matrix S = [X, P, *] to W
+    S.middleCols(nx + Pcols, W.cols()) = W;
+
+    // Set search space dimension
+    ns = nx + Pcols + W.cols();
+
+    // Update AS, BS
+    AS.leftCols(nx) = AX;
+    AS.middleCols(nx, ns - nx) = A(S.middleCols(nx, ns - nx));
+
+    BS.leftCols(nx) = BX;
+    BS.middleCols(nx, ns - nx) =
+        B ? (*B)(S.middleCols(nx, ns - nx)) : S.middleCols(nx, ns - nx);
+
+    /// Update Gram matrices
+    StAS.topLeftCorner(ns, ns) = S.leftCols(ns).transpose() * AS.leftCols(ns);
+    StBS.topLeftCorner(ns, ns) = S.leftCols(ns).transpose() * BS.leftCols(ns);
+
+    std::tie(Thetax, Thetap, Cx, Cp, useOrtho) =
+        ModifiedRayleighRitz<Vector, Matrix>(StAS.topLeftCorner(ns, ns),
+                                             StBS.topLeftCorner(ns, ns), nx, nc,
+                                             useOrtho_prev);
+
+    if (useOrtho && !useOrtho_prev) {
+      // useOrtho just "switched on" for the first time
+
+      // B-orthonormalize preconditioned residuals TR against partial search
+      // space basis [X, P]
+      W = orthoDrop<Vector, Matrix, Args...>(TR, S.leftCols(nx + Pcols), B,
+                                             args...);
+
+      // Update search space basis S with this new set of B-orthonormalized
+      // preconditioned search directions W
+      S.middleCols(nx + Pcols, W.cols()) = W;
+
+      // Update search space dimension
+      ns = nx + Pcols + W.cols();
+
+      // Update AS, BS with this new choice of W
+      AS.middleCols(nx + Pcols, W.cols()) = A(W);
+      BS.middleCols(nx + Pcols, W.cols()) = B ? (*B)(W) : W;
+
+      /// Update Gram matrices -- this is a bit wasteful, since we're
+      /// recomputing the *ENTIRE* Gram matrices, but since this block executes
+      /// AT MOST once per algorithm execution, it's probably fine XD
+      StAS.topLeftCorner(ns, ns) = S.leftCols(ns).transpose() * AS.leftCols(ns);
+      StBS.topLeftCorner(ns, ns) = S.leftCols(ns).transpose() * BS.leftCols(ns);
+
+      std::tie(Thetax, Thetap, Cx, Cp, useOrtho) =
+          ModifiedRayleighRitz<Vector, Matrix>(StAS.topLeftCorner(ns, ns),
+                                               StBS.topLeftCorner(ns, ns), nx,
+                                               nc, useOrtho);
+    }
+
+    // Cache the current value of useOrtho
+    useOrtho_prev = useOrtho;
+
+    // Update eigenvector estimates X
+    X = S.leftCols(ns) * Cx;
+
+    // Update P-block of S
+    S.middleCols(nx, Cp.cols()) = S.leftCols(ns) * Cp;
+    Pcols = Cp.cols();
+
+    // Update AX and BX
+    AX = A(X);
+    BX = B ? (*B)(X) : X;
+
+    // Update residuals
+    R = AX - BX * Thetax.asDiagonal();
+
+    /// TEST STOPPING CRITERIA
+
     // Calculate residual norms
     r = R.colwise().norm();
 
-    /// TEST STOPPING CRITERIA
-    // Here we apply the convergence test described in Section 4.3 of the
-    // paper "A Robust and Efficient Implementation of LOBPCG"
+    // Here we apply the convergence test described in Section 4.3 of
+    // the paper "A Robust and Efficient Implementation of LOBPCG"
 
     Vector tolerances =
-        tau *
-        (A2normest +
-         B2normest * Theta.diagonal().head(nx).cwiseAbs().transpose().array()) *
+        tau * (A2normest + B2normest * Thetax.cwiseAbs().transpose().array()) *
         X.colwise().norm().array();
 
-    // Test how many of the lowest k eigenpairs have converged
-    num_converged =
-        (r.head(nev).array() <= tolerances.head(nev).array()).count();
+    // Calculate vector of Boolean indicators for the convergence of
+    // each eigenpair
+    const auto converged =
+        (r.head(nev).array() <= tolerances.head(nev).array());
 
-    // Call user-supplied function (if one was provided), and test for
-    // user-defined stopping criterion
+    // Find the largest number k such that converged[i] = true for
+    // all i <= k; this gives the number of converged eigenvectors.
+    // Note that this may be less than the *TOTAL* number of
+    // eigenpairs for which converged = true; this difference
+    // accounts for the fact that eigenpairs must be soft-locked IN
+    // ORDER: that is, we may apply soft locking only to the first
+    // *CONTINGUOUS BLOCK* of converged eigenpairs
+    for (nc = 0; nc < nev; ++nc)
+      if (!converged[nc])
+        break;
+
+    // Call user-supplied function (if one was provided), and test
+    // for user-defined stopping criterion
     if (user_function &&
-        (*user_function)(num_iters, A, B, T, nev, Theta, X, r, args...))
+        (*user_function)(num_iters, A, B, T, nev, Thetax, X, r, args...))
       break;
 
     // Test whether the requested number of eigenpairs have converged
-    if (num_converged == nev)
+    if (nc == nev)
       break;
 
-    // Step 9:  Apply preconditioner T (if one was supplied)
-    if (T)
-      W = (*T)(W);
-
-    // Step 11:  Compute BW and B-orthonormalize W
-    BW = B ? (*B)(W) : W;
-
-    // Calculate upper-triangular factor R of Cholesky decomposition of W'BW =
-    // R'R
-    R = (W.transpose() * BW).llt().matrixU();
-    Rinv = R.template triangularView<Eigen::Upper>().solve(Im);
-    W = W * Rinv;
-    BW = BW * Rinv;
-
-    // Step 12:  Compute AW
-    AW = A(W);
-
-    if (num_iters > 0) {
-      // Step 14:  B-orthonormalize P
-      R = (P.transpose() * BP).llt().matrixU();
-      Rinv = R.template triangularView<Eigen::Upper>().solve(Im);
-      P = P * Rinv;
-
-      // Step 15:  Update AP
-      AP = AP * Rinv;
-      BP = BP * Rinv;
-    }
-
-    /// Rayleigh-Ritz procedure
-
-    if (num_iters > 0) {
-
-      if (num_iters == 1) {
-        gramA.resize(3 * m, 3 * m);
-        gramB.resize(3 * m, 3 * m);
-      }
-
-      // Step 18:  Fill in the upper-triangular block of gramA
-      gramA.block(0, 0, m, m) = Theta.asDiagonal();
-      gramA.block(0, m, m, m) = X.transpose() * AW;
-      gramA.block(0, 2 * m, m, m) = X.transpose() * AP;
-
-      gramA.block(m, m, m, m) = W.transpose() * AW;
-      gramA.block(m, 2 * m, m, m) = W.transpose() * AP;
-
-      gramA.block(2 * m, 2 * m, m, m) = P.transpose() * AP;
-
-      // Step 19:  Fill in the upper-triangular block of gramB
-      gramB.block(0, 0, m, m) = Im;
-      gramB.block(0, m, m, m) = X.transpose() * BW;
-      gramB.block(0, 2 * m, m, m) = X.transpose() * BP;
-
-      gramB.block(m, m, m, m) = Im;
-      gramB.block(m, 2 * m, m, m) = W.transpose() * BP;
-
-      gramB.block(2 * m, 2 * m, m, m) = Im;
-    } else {
-      gramA.resize(2 * m, 2 * m);
-      gramB.resize(2 * m, 2 * m);
-
-      // Step 21
-      gramA.block(0, 0, m, m) = Theta.asDiagonal();
-      gramA.block(0, m, m, m) = X.transpose() * AW;
-
-      gramA.block(m, m, m, m) = W.transpose() * AW;
-
-      // Step 22
-      gramB.block(0, 0, m, m) = Im;
-      gramB.block(0, m, m, m) = X.transpose() * BW;
-
-      gramB.block(m, m, m, m) = Im;
-    }
-
-    // Step 24
-    Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> genEigs(gramA.transpose(),
-                                                             gramB.transpose());
-
-    // Extract the smallest m eigenvalues and corresponding eigenvectors
-    Theta = genEigs.eigenvalues().head(m);
-    V = genEigs.eigenvectors().leftCols(m);
-
-    if (num_iters > 0) {
-
-      // Step 26
-      CX = V.topRows(m);
-      CW = V.middleRows(m, m);
-      CP = V.bottomRows(m);
-
-      // Step 27
-      P = W * CW + P * CP;
-      AP = AW * CW + AP * CP;
-      BP = BW * CW + BP * CP;
-
-      // Step 28
-      X = X * CX + P;
-      AX = AX * CX + AP;
-      BX = BX * CX + BP;
-    } else {
-      // Step 30
-      CX = V.topRows(m);
-      CW = V.bottomRows(m);
-
-      // Step 31
-      P = W * CW;
-      AP = AW * CW;
-      BP = BW * CW;
-
-      // Step 32
-      X = X * CX + P;
-      AX = AX * CX + AP;
-      BX = BX * CX + BP;
-    }
   } // for(num_iters ... )
 
   /// Finalize solution
-  Theta.conservativeResize(nev);
+  Thetax.conservativeResize(nev);
   X.conservativeResize(Eigen::NoChange, nev);
 
-  return std::make_pair(Theta, X);
+  return std::make_pair(Thetax, X);
 }
-
-* /
 
 /** This function estimates the smallest eigenpairs (lambda, x) of the
  * generalized symmetric eigenvalue problem:
@@ -721,8 +725,8 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
  *   approximates A^-1 in the sense that the condition number kappa(TA) should
  *   be (much) smaller than kappa(A) itself.  The absence of this parameter
  *   indicates that T == I (i.e. that no preconditioning is applied)
- * - n is the dimension of the eigenvalue problem (order of A, B, T)
- * - m is the block size
+ * - m is the dimension of the eigenvalue problem (order of A, B, T)
+ * - nx is the block size
  * - nev is the number of desired eigenpairs; note that this number should be
  *   less than the block size m.
  * - max_iters is the maximum number of iterations to perform
@@ -732,8 +736,8 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
  *   that have converged to the requested precision
  * - tau is the stopping tolerance for the convergence test described in
  *   Section 4.3 of the paper "A Robust and Efficient Implementation of
- * LOBPCG"; specifically, an eigenpair (lambda, x) is considered converged
- * when:
+ *   LOBPCG"; specifically, an eigenpair (lambda, x) is considered converged
+ *   when:
  *
  *   ||Ax - lambda * Bx|| / (||A||_2 + lambda * ||B_2|| * ||x||) <= tau
  *
@@ -742,24 +746,21 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
  *   (optionally) to define a custom stopping criterion for the algorithm.
  */
 
-/**
 template <typename Vector, typename Matrix, typename Scalar = double,
           typename... Args>
 std::pair<Vector, Matrix>
 LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
        const std::optional<SymmetricLinearOperator<Matrix, Args...>> &B,
        const std::optional<SymmetricLinearOperator<Matrix, Args...>> &T,
-       size_t n, size_t m, size_t nev, size_t max_iters, size_t &num_iters,
-       size_t &num_converged, Args &...args, Scalar tau = 1e-6,
+       size_t m, size_t nx, size_t nev, size_t max_iters, size_t &num_iters,
+       size_t &nc, Args &...args, Scalar tau = 1e-6,
        const std::optional<LOBPCGUserFunction<Vector, Matrix, Scalar, Args...>>
            &user_function = std::nullopt) {
-  Matrix X0 = Matrix::Random(n, m);
+  Matrix X0 = Matrix::Random(m, nx);
 
-  return LOBPCG<Vector, Matrix, Scalar, Args...>(A, B, T, X0, nev, max_iters,
-                                                 num_iters, num_converged,
-                                                 args..., tau, user_function);
+  return LOBPCG<Vector, Matrix, Scalar, Args...>(
+      A, B, T, X0, nev, max_iters, num_iters, nc, args..., tau, user_function);
 }
 
-*/
 } // namespace LinearAlgebra
 } // namespace Optimization
