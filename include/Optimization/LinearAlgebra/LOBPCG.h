@@ -596,21 +596,24 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
     ns = nx + Pcols + W.cols();
 
     // Update AS, BS
-    AS.leftCols(nx) = AX;
-    AS.middleCols(nx, ns - nx) = A(S.middleCols(nx, ns - nx));
+    AS = A(S.leftCols(ns));
+    // AS.leftCols(nx) = AX;
+    // AS.middleCols(nx, ns - nx) = A(S.middleCols(nx, ns - nx));
 
-    BS.leftCols(nx) = BX;
-    BS.middleCols(nx, ns - nx) =
-        B ? (*B)(S.middleCols(nx, ns - nx)) : S.middleCols(nx, ns - nx);
+    BS = B ? (*B)(S.leftCols(ns)) : S.leftCols(ns);
+    // BS.leftCols(nx) = BX;
+    // BS.middleCols(nx, ns - nx) =
+    // B ? (*B)(S.middleCols(nx, ns - nx)) : S.middleCols(nx, ns - nx);
 
     /// Update Gram matrices
-    StAS.topLeftCorner(ns, ns) = S.leftCols(ns).transpose() * AS.leftCols(ns);
-    StBS.topLeftCorner(ns, ns) = S.leftCols(ns).transpose() * BS.leftCols(ns);
+    StAS = S.leftCols(ns).transpose() * AS;
+    StBS = S.leftCols(ns).transpose() * BS;
+    // StAS.topLeftCorner(ns, ns) = S.leftCols(ns).transpose() *
+    // AS.leftCols(ns); StBS.topLeftCorner(ns, ns) = S.leftCols(ns).transpose()
+    // * BS.leftCols(ns);
 
     std::tie(Thetax, Thetap, Cx, Cp, useOrtho) =
-        ModifiedRayleighRitz<Vector, Matrix>(StAS.topLeftCorner(ns, ns),
-                                             StBS.topLeftCorner(ns, ns), nx, nc,
-                                             useOrtho_prev);
+        ModifiedRayleighRitz<Vector, Matrix>(StAS, StBS, nx, nc, useOrtho_prev);
 
     if (useOrtho && !useOrtho_prev) {
       // useOrtho just "switched on" for the first time
@@ -634,13 +637,11 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
       /// Update Gram matrices -- this is a bit wasteful, since we're
       /// recomputing the *ENTIRE* Gram matrices, but since this block executes
       /// AT MOST once per algorithm execution, it's probably fine XD
-      StAS.topLeftCorner(ns, ns) = S.leftCols(ns).transpose() * AS.leftCols(ns);
-      StBS.topLeftCorner(ns, ns) = S.leftCols(ns).transpose() * BS.leftCols(ns);
+      StAS = S.leftCols(ns).transpose() * AS.leftCols(ns);
+      StBS = S.leftCols(ns).transpose() * BS.leftCols(ns);
 
       std::tie(Thetax, Thetap, Cx, Cp, useOrtho) =
-          ModifiedRayleighRitz<Vector, Matrix>(StAS.topLeftCorner(ns, ns),
-                                               StBS.topLeftCorner(ns, ns), nx,
-                                               nc, useOrtho);
+          ModifiedRayleighRitz<Vector, Matrix>(StAS, StBS, nx, nc, useOrtho);
     }
 
     // Cache the current value of useOrtho

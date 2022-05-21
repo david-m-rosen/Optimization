@@ -436,26 +436,65 @@ TEST_F(LOBPCGTest, ModifiedRayleighRitzUseOrthoFalse) {
   EXPECT_FALSE(useOrtho);
 }
 
-/**
+/// Test LOBPCG with a small standard eigenvalue problem
+TEST_F(LOBPCGTest, SmallEigenValueProblem) {
+
+  // Construct a diagonal matrix with the following spectrum
+  Vector Lambda(4);
+  Lambda << 1.0, 2.0, 3.0, 4.0;
+  A = [&Lambda](const Matrix &X) -> Matrix { return Lambda.asDiagonal() * X; };
+
+  // Set initial eigenvector estimates X0
+  Matrix X0(4, 2);
+  X0 << 0.8147, 0.6324, 0.9058, 0.0975, 0.1270, 0.2785, 0.9134, 0.5469;
+
+  size_t nev = 2; // Number of requested eigenvalues
+
+  // Run LOBPCG
+  Vector Theta;
+  Matrix X;
+  size_t num_iters;
+  size_t num_converged;
+  std::tie(Theta, X) = Optimization::LinearAlgebra::LOBPCG<Vector, Matrix>(
+      A, std::optional<LinearOperator>(nullopt),
+      std::optional<LinearOperator>(nullopt), X0, nev, n, num_iters,
+      num_converged, tau);
+
+  /// Verify that the reported eigenvalues converged to the required tolerance
+  EXPECT_EQ(num_converged, nev);
+
+  /// Verify that the estimated eigenvalues are correct to high accuracy
+  EXPECT_LT((Theta - Lambda.head(nev)).norm(), 1e-3);
+
+  EXPECT_FALSE(Theta.array().isNaN().any());
+  EXPECT_FALSE(X.array().isNaN().any());
+}
+
 /// Test LOBPCG with standard eigenvalue problem and no preconditioning
 TEST_F(LOBPCGTest, EigenvalueProblem) {
 
-Vector Theta;
-Matrix X;
-size_t num_iters;
-size_t num_converged;
-std::tie(Theta, X) = Optimization::LinearAlgebra::LOBPCG<Vector, Matrix>(
-A, std::optional<LinearOperator>(), std::optional<LinearOperator>(), n, m,
-nev, n, num_iters, num_converged, tau);
+  Vector Theta;
+  Matrix X;
+  size_t num_iters;
+  size_t num_converged;
+  std::tie(Theta, X) = Optimization::LinearAlgebra::LOBPCG<Vector, Matrix>(
+      A, std::optional<LinearOperator>(nullopt),
+      std::optional<LinearOperator>(nullopt), n, m, nev, 10 * n, num_iters,
+      num_converged, tau);
 
-/// Verify that the reported eigenvalues converged to the required tolerance
-EXPECT_EQ(num_converged, nev);
+  /// Verify that the reported eigenvalues converged to the required tolerance
+  EXPECT_EQ(num_converged, nev);
 
-/// Verify that the estimated eigenvalues are correct to high accuracy
-Vector Lambda_true = D.head(nev);
-EXPECT_LT((Theta - Lambda_true).norm(), 1e-3);
+  /// Verify that the estimated eigenvalues are correct to high accuracy
+  Vector Lambda_true = D.head(nev);
+  EXPECT_LT((Theta - Lambda_true).norm(), 1e-3);
+
+  /// Verify that the returned values contain no nans
+  EXPECT_FALSE(Theta.array().isNaN().any());
+  EXPECT_FALSE(X.array().isNaN().any());
 }
 
+/**
 /// Test LOBPCG with standard eigenvalue problem and a simple (diagonal) PSD
 /// preconditioner
 TEST_F(LOBPCGTest, PreconditionedEigenvalueProblem) {
@@ -465,8 +504,8 @@ Matrix X;
 size_t num_iters;
 size_t num_converged;
 std::tie(Theta, X) = Optimization::LinearAlgebra::LOBPCG<Vector, Matrix>(
-A, std::optional<LinearOperator>(), std::optional<LinearOperator>(T), n,
-m, nev, n, num_iters, num_converged, tau);
+  A, std::optional<LinearOperator>(), std::optional<LinearOperator>(T), n,
+  m, nev, n, num_iters, num_converged, tau);
 
 /// Verify that the method reported the correct number of converged
 /// eigenvalues
