@@ -7,6 +7,7 @@
 
 #include "Optimization/LinearAlgebra/LOBPCG.h"
 
+#include <fstream>
 #include <iostream>
 
 #include <Eigen/Core>
@@ -29,40 +30,31 @@ using namespace std;
 int main() {
 
   /// Test configuration
+
   // Dimension of linear operators
-  size_t n = 20;
+  size_t m = 500;
 
-  // Block size to use for LOBPCG
-  size_t m = 5;
+  // Block size
+  size_t nx = 3;
 
-  // Number of desired eigenvalues k to use for LOBPCG
-  size_t nev = 3;
+  // Number of desired eigenvalues k
+  size_t nev = 2;
 
   /// Termination criteria
-  size_t max_iters = 5 * n;
-  double tau = 1e-2;
+  size_t max_iters = 3 * m;
+  double tau = 1e-6;
 
   /// Test operators
 
   /// Construct linear operator A as a diagonal operator with a difficult
   /// spectrum
-  Vector Aspec = Eigen::pow(10, Vector::LinSpaced(n, -5, 6).array());
+  Vector Lambda = Vector::LinSpaced(m, -.5 * m, .5 * m);
 
-  LinearOperator A = [Aspec](const Matrix &X) -> Matrix {
-    return Aspec.asDiagonal() * X;
+  LinearOperator A = [&Lambda](const Matrix &X) -> Matrix {
+    return Lambda.asDiagonal() * X;
   };
 
-  /// Set stopping function to be the relative error criterion
-  StopFun stop_fun = [tau](size_t i, const LinearOperator &A,
-                           const std::optional<LinearOperator> &B,
-                           const std::optional<LinearOperator> &T, size_t nev,
-                           const Vector &Theta, const Matrix &X,
-                           const Vector &r) -> bool {
-    Vector res_tols = tau * Theta.head(nev).cwiseAbs();
-    return ((r.head(nev).array() <= res_tols.array()).count() == nev);
-  };
-
-  cout << "Requested spectrum of operator A: " << Aspec.head(nev).transpose()
+  cout << "Requested spectrum of operator A: " << Lambda.head(nev).transpose()
        << endl
        << endl;
 
@@ -70,14 +62,48 @@ int main() {
 
   cout << "Running LOBPCG ... " << endl;
 
+  // Pass in a user function to track the evolution of
+  // - Eigenvalue estimates
+  // - Eigenpair residuals
+  // - Number of converged eigenpairs
+
+  std::vector<Vector> Thetas;
+  std::vector<Vector> residuals;
+  std::vector<size_t> ncvs;
+
+  Optimization::LinearAlgebra::LOBPCGUserFunction<Vector, Matrix> user_fun =
+      [&Thetas, &residuals, &ncvs](
+          size_t i,
+          const Optimization::LinearAlgebra::SymmetricLinearOperator<Matrix> &A,
+          const std::optional<
+              Optimization::LinearAlgebra::SymmetricLinearOperator<Matrix>> &B,
+          const std::optional<
+              Optimization::LinearAlgebra::SymmetricLinearOperator<Matrix>> &T,
+          size_t nev, const Vector &Theta, const Matrix &X, const Vector &r,
+          size_t nc) -> bool {
+    // Record eigenvector estimates
+    Thetas.emplace_back(Theta);
+
+    // Record residuals
+    residuals.emplace_back(r);
+
+    // Record number of converged eigenpairs
+    ncvs.emplace_back(nc);
+
+    return false;
+  };
+
   Vector Theta;
   Matrix X;
   size_t num_iters;
   size_t num_converged;
   std::tie(Theta, X) = Optimization::LinearAlgebra::LOBPCG<Vector, Matrix>(
-      A, std::optional<LinearOperator>(), std::optional<LinearOperator>(), n, m,
-      nev, max_iters, num_iters, num_converged, 0.0,
-      std::optional<StopFun>(stop_fun));
+      A, std::optional<LinearOperator>(nullopt),
+      std::optional<LinearOperator>(nullopt), m, nx, nev, max_iters, num_iters,
+      num_converged, tau,
+      std::optional<
+          Optimization::LinearAlgebra::LOBPCGUserFunction<Vector, Matrix>>(
+          user_fun));
 
   cout << "LOBPCG terminated after " << num_iters << " iterations" << endl;
   cout << "Returned eigenvalue estimates: " << Theta.transpose() << endl;
@@ -89,5 +115,28 @@ int main() {
   Vector xnorms = X.colwise().norm();
 
   cout << "Residuals of returned vectors:  " << rnorms.transpose() << endl;
-  cout << "Norms of eigenvector estimates: " << xnorms.transpose() << endl;
+
+  /// Record state traces
+
+  // Record sequence of eigenvalue estimates
+  std::string eigs_filename = "eigenvalues.txt";
+  ofstream eigs_file(eigs_filename);
+  for (const auto l : Thetas)
+    eigs_file << l.transpose() << std::endl;
+  eigs_file.close();
+
+  // Record sequence of residuals
+  std::string residuals_filename = "residuals.txt";
+  ofstream residuals_file(residuals_filename);
+  for (const auto r : residuals)
+    residuals_file << r.transpose() << std::endl;
+  residuals_file.close();
+
+  // Record sequence of number of converged eigenpairs
+  std::string ncvs_filename = "ncvs.txt";
+  ofstream ncvs_file(ncvs_filename);
+  for (const auto c : ncvs)
+    ncvs_file << c << " ";
+  ncvs_file << std::endl;
+  ncvs_file.close();
 }

@@ -66,7 +66,8 @@ protected:
     stop_fun = [this](size_t i, const LinearOperator &A,
                       const std::optional<LinearOperator> &B,
                       const std::optional<LinearOperator> &T, size_t nev,
-                      const Vector &Theta, const Matrix &X, const Vector &r) {
+                      const Vector &Theta, const Matrix &X, const Vector &r,
+                      size_t nc) {
       Vector res_tols = this->tau * Theta.head(nev).cwiseAbs();
       return ((r.head(nev).array() <= res_tols.array()).count() == nev);
     };
