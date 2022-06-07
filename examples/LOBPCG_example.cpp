@@ -35,10 +35,10 @@ int main() {
   size_t m = 500;
 
   // Block size
-  size_t nx = 3;
+  size_t nx = 10;
 
   // Number of desired eigenvalues k
-  size_t nev = 2;
+  size_t nev = 5;
 
   /// Termination criteria
   size_t max_iters = 3 * m;

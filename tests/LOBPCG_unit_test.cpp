@@ -34,10 +34,10 @@ protected:
   size_t n = 500;
 
   // Block size
-  size_t m = 5;
+  size_t m = 10;
 
   // Number of desired eigenvalues k
-  size_t nev = 3;
+  size_t nev = 5;
 
   /// Termination criteria
   size_t max_iters = n;
@@ -488,32 +488,30 @@ TEST_F(LOBPCGTest, EigenvalueProblem) {
 
   /// Verify that the estimated eigenvalues are correct to high accuracy
   Vector Lambda_true = D.head(nev);
-  EXPECT_LT((Theta - Lambda_true).norm(), 1e-3);
+  EXPECT_LT((Theta - Lambda_true).norm(), 1e-4);
 
   /// Verify that the returned values contain no nans
   EXPECT_FALSE(Theta.array().isNaN().any());
   EXPECT_FALSE(X.array().isNaN().any());
 }
 
-/**
 /// Test LOBPCG with standard eigenvalue problem and a simple (diagonal) PSD
 /// preconditioner
 TEST_F(LOBPCGTest, PreconditionedEigenvalueProblem) {
 
-Vector Theta;
-Matrix X;
-size_t num_iters;
-size_t num_converged;
-std::tie(Theta, X) = Optimization::LinearAlgebra::LOBPCG<Vector, Matrix>(
-  A, std::optional<LinearOperator>(), std::optional<LinearOperator>(T), n,
-  m, nev, n, num_iters, num_converged, tau);
+  Vector Theta;
+  Matrix X;
+  size_t num_iters;
+  size_t num_converged;
+  std::tie(Theta, X) = Optimization::LinearAlgebra::LOBPCG<Vector, Matrix>(
+      A, std::optional<LinearOperator>(), std::optional<LinearOperator>(T), n,
+      m, nev, n, num_iters, num_converged, tau);
 
-/// Verify that the method reported the correct number of converged
-/// eigenvalues
-EXPECT_EQ(num_converged, nev);
+  /// Verify that the method reported the correct number of converged
+  /// eigenvalues
+  EXPECT_EQ(num_converged, nev);
 
-/// Verify that the estimated eigenvalues are correct to high accuracy
-Vector Lambda_true = D.head(nev);
-EXPECT_LT((Theta - Lambda_true).norm(), 1e-3);
+  /// Verify that the estimated eigenvalues are correct to high accuracy
+  Vector Lambda_true = D.head(nev);
+  EXPECT_LT((Theta - Lambda_true).norm(), 1e-4);
 }
-*/
