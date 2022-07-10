@@ -234,7 +234,7 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
 
   /// MAIN LOOP
 
-  for (num_iters = 0; num_iters < max_iters; ++num_iters) {
+  for (num_iters = 1; num_iters < max_iters; ++num_iters) {
 
     /// LOOP INVARIANTS: At the start of each iteration, the following hold:
     ///
@@ -254,7 +254,8 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
     S.leftCols(nx) = X;
     S.middleCols(nx, nx - nc) = W.rightCols(nx - nc);
 
-    if (num_iters > 0) {
+    if (num_iters > 1) {
+      // Construct P matrix
       S.middleCols(2 * nx - nc, nx - nc) = P.rightCols(nx - nc);
       ns = 3 * nx - 2 * nc;
     } else {
