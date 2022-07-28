@@ -68,7 +68,7 @@ using TNTUserFunction =
                        const Tangent &g,
                        const LinearOperator<Variable, Tangent, Args...> &HessOp,
                        Scalar Delta, size_t num_STPCG_iters, const Tangent &h,
-                       Scalar df, Scalar rho, bool accepted, Args &... args)>;
+                       Scalar df, Scalar rho, bool accepted, Args &...args)>;
 
 /** A lightweight struct containing a few additional algorithm-specific
  * configuration parameters for a truncated-Newton trust-region method
@@ -81,7 +81,7 @@ struct TNTParams : public SmoothOptimizerParams<Scalar> {
   Scalar Delta0 = 1;
 
   /** Lower-bound on the gain ratio for accepting a proposed step (should
-satisfy 0 < eta1 <= eta2) */
+   * satisfy 0 < eta1 <= eta2) */
   Scalar eta1 = .05;
 
   /** Lower-bound on the gain ratio for a 'very successful' iteration (should
@@ -137,25 +137,23 @@ enum class TNTStatus {
   Gradient,
 
   /** The algorithm obtained a solution satisfying the preconditioned gradient
-     tolerance */
+   * tolerance */
   PreconditionedGradient,
 
   /** The algorithm terminated because the relative decrease in function value
-     obtained after the last accepted update was less than the specified
-     tolerance */
+   * obtained after the last accepted update was less than the specified
+   * tolerance */
   RelativeDecrease,
 
   /** The algorithm terminated because the norm of the last accepted update
-     step
-     was less than the specified tolerance */
+   * step was less than the specified tolerance */
   Stepsize,
 
   /** The algorithm terminated because the trust-region radius decreased below
-     the specified threshold */
+   * the specified threshold */
   TrustRegion,
 
-  /** The algorithm exhausted the allotted number of major (outer) iterations
-   */
+  /** The algorithm exhausted the allotted number of major (outer) iterations */
   IterationLimit,
 
   /** The algorithm exhausted the allotted computation time */
@@ -166,7 +164,7 @@ enum class TNTStatus {
 };
 
 /** A useful struct used to hold the output of a truncated-Newton trust-region
-optimization method */
+ * optimization method */
 template <typename Variable, typename Scalar = double>
 struct TNTResult : public SmoothOptimizerResult<Variable, Scalar> {
 
@@ -186,10 +184,10 @@ struct TNTResult : public SmoothOptimizerResult<Variable, Scalar> {
   std::vector<size_t> inner_iterations;
 
   /** The M-norm of the update step computed during each iteration */
-  std::vector<Scalar> update_step_M_norm;
+  std::vector<Scalar> update_step_M_norms;
 
-  /** The gain ratio of the update step computed during each iteration */
-  std::vector<Scalar> rho;
+  /** The gain ratios of the update steps computed during each iteration */
+  std::vector<Scalar> gain_ratios;
 
   /** The trust-region radius at the START of each iteration */
   std::vector<Scalar> trust_region_radius;
@@ -248,7 +246,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
     const QuadraticModel<Variable, Tangent, Args...> &QM,
     const RiemannianMetric<Variable, Tangent, Scalar, Args...> &metric,
     const Retraction<Variable, Tangent, Args...> &retract, const Variable &x0,
-    Args &... args,
+    Args &...args,
     const std::optional<LinearOperator<Variable, Tangent, Args...>> &precon =
         std::nullopt,
     const TNTParams<Scalar> &params = TNTParams<Scalar>(),
@@ -400,14 +398,14 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
   // Linear operator
   Optimization::LinearAlgebra::SymmetricLinearOperator<Tangent, Args...> H =
-      [&x, &Hess](const Tangent &v, Args &... args) -> Tangent {
+      [&x, &Hess](const Tangent &v, Args &...args) -> Tangent {
     return Hess(x, v, args...);
   };
 
   // Inner product
   Optimization::LinearAlgebra::InnerProduct<Tangent, Scalar, Args...>
       inner_product = [&x, &metric](const Tangent &v1, const Tangent &v2,
-                                    Args &... args) -> Scalar {
+                                    Args &...args) -> Scalar {
     return metric(x, v1, v2, args...);
   };
 
@@ -415,7 +413,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
   Optimization::LinearAlgebra::STPCGPreconditioner<Tangent, MultiplierType,
                                                    Args...>
       P = [&x, &precon](const Tangent &v,
-                        Args &... args) -> std::pair<Tangent, MultiplierType> {
+                        Args &...args) -> std::pair<Tangent, MultiplierType> {
     return std::pair<Tangent, MultiplierType>((*precon)(x, v, args...),
                                               MultiplierType());
   };
@@ -538,9 +536,9 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
 
     // Record output
     result.inner_iterations.push_back(inner_iterations);
-    result.update_step_norm.push_back(h_norm);
-    result.update_step_M_norm.push_back(h_M_norm);
-    result.rho.push_back(rho);
+    result.update_step_norms.push_back(h_norm);
+    result.update_step_M_norms.push_back(h_M_norm);
+    result.gain_ratios.push_back(rho);
 
     // Call the user-supplied function to provide access to internal algorithm
     // state, and check for user-requested termination
@@ -712,7 +710,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
         &HessianConstructor,
     const RiemannianMetric<Variable, Tangent, Scalar, Args...> &metric,
     const Retraction<Variable, Tangent, Args...> &retract, const Variable &x0,
-    Args &... args,
+    Args &...args,
     const std::optional<LinearOperator<Variable, Tangent, Args...>> &precon =
         std::nullopt,
     const TNTParams<Scalar> &params = TNTParams<Scalar>(),
@@ -724,7 +722,7 @@ TNT(const Objective<Variable, Scalar, Args...> &f,
   QuadraticModel<Variable, Tangent, Args...> QM =
       [&grad_f, &HessianConstructor](
           const Variable &X, Tangent &grad,
-          LinearOperator<Variable, Tangent, Args...> &Hess, Args &... args) {
+          LinearOperator<Variable, Tangent, Args...> &Hess, Args &...args) {
         // Set gradient
         grad = grad_f(X, args...);
 
@@ -760,7 +758,7 @@ template <typename Vector, typename Scalar = double, typename... Args>
 TNTResult<Vector, Scalar> EuclideanTNT(
     const Objective<Vector, Scalar, Args...> &f,
     const EuclideanQuadraticModel<Vector, Args...> &QM, const Vector &x0,
-    Args &... args,
+    Args &...args,
     const std::optional<EuclideanLinearOperator<Vector, Args...>> &precon =
         std::nullopt,
     const TNTParams<Scalar> &params = TNTParams<Scalar>(),
@@ -783,7 +781,7 @@ TNTResult<Vector, Scalar> EuclideanTNT(
     const EuclideanVectorField<Vector, Args...> &nabla_f,
     const EuclideanLinearOperatorConstructor<Vector, Args...>
         &HessianConstructor,
-    const Vector &x0, Args &... args,
+    const Vector &x0, Args &...args,
     const std::optional<EuclideanLinearOperator<Vector, Args...>> &precon =
         std::nullopt,
     const TNTParams<Scalar> &params = TNTParams<Scalar>(),
@@ -793,7 +791,7 @@ TNTResult<Vector, Scalar> EuclideanTNT(
   EuclideanQuadraticModel<Vector, Args...> QM =
       [&nabla_f, &HessianConstructor](
           const Vector &X, Vector &grad,
-          EuclideanLinearOperator<Vector, Args...> &Hess, Args &... args) {
+          EuclideanLinearOperator<Vector, Args...> &Hess, Args &...args) {
         // Set gradient
         grad = nabla_f(X, args...);
 

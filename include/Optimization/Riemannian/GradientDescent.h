@@ -36,7 +36,7 @@ template <typename Variable, typename Tangent, typename Scalar = double,
 using GradientDescentUserFunction =
     std::function<void(size_t i, double t, const Variable &x, Scalar f,
                        const Tangent &g, const Tangent &h, Scalar df,
-                       Args &... args)>;
+                       Args &...args)>;
 
 /** A lightweight struct containing a few additional algorithm-specific
  * configuration parameters for a gradient descent optimization method
@@ -64,17 +64,17 @@ enum class GradientDescentStatus {
   Gradient,
 
   /** The algorithm terminated because the relative decrease in function value
-     obtained after the last accepted update was less than the specified
-     tolerance */
+   * obtained after the last accepted update was less than the specified
+   * tolerance */
   RelativeDecrease,
 
   /** The algorithm terminated because the norm of the last accepted update step
-     was less than the specified tolerance */
+   * was less than the specified tolerance */
   Stepsize,
 
   /** The algorithm terminated because linesearch failed to determine a stepsize
-     along the gradient direction that generated a sufficient decrease in
-     function value */
+   * along the gradient direction that generated a sufficient decrease in
+   * function value */
   LineSearch,
 
   /** The algorithm exhausted the allotted number of major (outer) iterations */
@@ -121,7 +121,6 @@ struct GradientDescentResult : public SmoothOptimizerResult<Variable, Scalar> {
  * - x0 (in M) is the initialization point for the Riemannian gradient descent
  *   algorithm.
  */
-
 template <typename Variable, typename Tangent, typename Scalar = double,
           typename... Args>
 GradientDescentResult<Variable, Scalar> GradientDescent(
@@ -129,7 +128,7 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
     const VectorField<Variable, Tangent, Args...> &grad_f,
     const RiemannianMetric<Variable, Tangent, Scalar, Args...> &metric,
     const Retraction<Variable, Tangent, Args...> &retract, const Variable &x0,
-    Args &... args,
+    Args &...args,
     const GradientDescentParams<Scalar> &params =
         GradientDescentParams<Scalar>(),
     const std::optional<GradientDescentUserFunction<
@@ -307,7 +306,7 @@ GradientDescentResult<Variable, Scalar> GradientDescent(
 
     // Record output
     result.linesearch_iterations.push_back(ls_iters);
-    result.update_step_norm.push_back(h_norm);
+    result.update_step_norms.push_back(h_norm);
 
     // Call the user-supplied function to provide access to internal algorithm
     // state
@@ -422,7 +421,7 @@ template <typename Vector, typename Scalar = double, typename... Args>
 GradientDescentResult<Vector, Scalar> EuclideanGradientDescent(
     const Objective<Vector, Scalar, Args...> &f,
     const EuclideanVectorField<Vector, Args...> grad_f, const Vector &x0,
-    Args &... args,
+    Args &...args,
     const GradientDescentParams<Scalar> &params =
         GradientDescentParams<Scalar>(),
     const std::optional<EuclideanGradientDescentUserFunction<

@@ -99,7 +99,7 @@ using TNLSUserFunction = std::function<bool(
     const Jacobian<VariableX, TangentX, VectorY, Args...> &gradFx,
     const JacobianAdjoint<VariableX, TangentX, VectorY, Args...> &gradFxT,
     Scalar Delta, size_t num_LSQR_iters, const TangentX &h, Scalar dL,
-    Scalar rho, bool accepted, Args &... args)>;
+    Scalar rho, bool accepted, Args &...args)>;
 
 /** A lightweight struct containing a few additional algorithm-specific
  * configuration parameters for a truncated-Newton trust-region method
@@ -204,7 +204,7 @@ enum class TNLSStatus {
 };
 
 /** A useful struct used to hold the output of a truncated-Newton trust-region
-optimization method */
+ * optimization method */
 template <typename Variable, typename Scalar = double>
 struct TNLSResult : public SmoothOptimizerResult<Variable, Scalar> {
 
@@ -271,7 +271,7 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
      const LinearAlgebra::InnerProduct<VectorY, Scalar, Args...>
          &inner_product_Y,
      const Retraction<VariableX, TangentX, Args...> &retract_X,
-     const VariableX &x0, Args &... args,
+     const VariableX &x0, Args &...args,
      const std::optional<TNLSPreconditioner<VariableX, TangentX, Args...>>
          &precon = std::nullopt,
      const TNLSParams<Scalar> &params = TNLSParams<Scalar>(),
@@ -432,12 +432,12 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
 
   if (precon) {
     // We are right-preconditioning by M: A(x) = gradFx * M * v
-    A = [&x, &gradFx, &precon](const TangentX &v, Args &... args) -> VectorY {
+    A = [&x, &gradFx, &precon](const TangentX &v, Args &...args) -> VectorY {
       return gradFx(x, precon->first(x, v, args...), args...);
     };
   } else {
     // No preconditioning: A = gradF * v
-    A = [&x, &gradFx](const TangentX &v, Args &... args) -> VectorY {
+    A = [&x, &gradFx](const TangentX &v, Args &...args) -> VectorY {
       return gradFx(x, v, args...);
     };
   }
@@ -445,12 +445,12 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
   Optimization::LinearAlgebra::LinearOperator<VectorY, TangentX, Args...> At;
   if (precon) {
     // We are right-preconditioning by M: At = Mt * gradFx' * w
-    At = [&x, &gradFxT, &precon](const TangentX &w, Args &... args) -> VectorY {
+    At = [&x, &gradFxT, &precon](const TangentX &w, Args &...args) -> VectorY {
       return precon->second(x, gradFxT(x, w, args...), args...);
     };
   } else {
     // No preconditioning: At = gradFx' * w
-    At = [&x, &gradFxT](const VectorY &w, Args &... args) -> TangentX {
+    At = [&x, &gradFxT](const VectorY &w, Args &...args) -> TangentX {
       return gradFxT(x, w, args...);
     };
   }
@@ -458,7 +458,7 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
   // Inner product on T_x(X)
   Optimization::LinearAlgebra::InnerProduct<TangentX, Scalar, Args...>
       inner_product_X = [&x, &metric_X](const TangentX &v1, const TangentX &v2,
-                                        Args &... args) -> Scalar {
+                                        Args &...args) -> Scalar {
     return metric_X(x, v1, v2, args...);
   };
 
@@ -598,7 +598,7 @@ TNLS(const Mapping<VariableX, VectorY, Args...> &F,
 
     // Record output
     result.inner_iterations.push_back(inner_iterations);
-    result.update_step_norm.push_back(h_norm);
+    result.update_step_norms.push_back(h_norm);
     result.rho.push_back(rho);
 
     // Call the user-supplied function to provide access to internal algorithm
@@ -748,7 +748,7 @@ template <typename Vector, typename Scalar = double, typename... Args>
 TNLSResult<Vector, Scalar> EuclideanTNLS(
     const Mapping<Vector, Vector, Args...> &F,
     const JacobianPairFunction<Vector, Vector, Vector> &J, const Vector &x0,
-    Args &... args,
+    Args &...args,
     const std::optional<TNLSPreconditioner<Vector, Vector, Args...>> &precon =
         std::nullopt,
     const TNLSParams<Scalar> &params = TNLSParams<Scalar>(),
