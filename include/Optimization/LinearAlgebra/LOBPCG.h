@@ -156,6 +156,24 @@ LOBPCG(const SymmetricLinearOperator<Matrix, Args...> &A,
     throw std::invalid_argument("Block size nx must be less than or equal to "
                                 "the dimension m of the problem");
 
+
+  // if we are working with a sufficiently small problem (small m)
+  // then let's use a standard eigensolver to compute the minimum
+  // nev eigenpairs.
+  if (m <= 100) {
+    Matrix I = Matrix::Identity(m, m);
+    if (!B) {
+      Eigen::SelfAdjointEigenSolver<Matrix> eig(A(I));
+      return std::make_pair(eig.eigenvalues().head(nev),
+                            eig.eigenvectors().leftCols(nev));
+    } else {
+      Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> eig;
+      eig.compute(A(I), (*B)(I));
+      return std::make_pair(eig.eigenvalues().head(nev),
+                            eig.eigenvectors().leftCols(nev));
+    }
+  }
+
   /// Preallocate memory
 
   // Get some useful references to elements of the result struct
